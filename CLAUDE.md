@@ -50,9 +50,27 @@ paint. Body is procedural primitive parts (`hider_body.gd`). Freehand
 texture painting + per-part hitboxes (so shots match posed visuals) are
 planned upgrades.
 
-NEXT: multiplayer (peer/host) — the user will direct this. GameState +
-match_runner + round_hud were built host-authoritative-friendly so a
-MultiplayerSpawner/Synchronizer layer can drop on top.
+Multiplayer (LAN/direct-IP, Godot high-level MP, host-authoritative) — DONE
+through the round loop, all recorder-verified with two instances:
+- `net_game.tscn`/`net_game.gd` — host()/join(ip) over ENet (port 24565),
+  custom MultiplayerSpawner spawn_function (sets pos+role on every peer,
+  avoids spawn races), host drives GameState phases + win check.
+- `net_player.tscn`/`net_player.gd` — one blob avatar; authority from
+  peer-id node name; MultiplayerSynchronizer streams position+facing; paint/
+  pose replicated once on lock-in via reliable RPC (NOT streamed); role-based
+  setup (seeker FP+gun / hider TP+paint+pose); host-validated set_caught RPC.
+- Normal mode for now: host = lone seeker, clients = hiders.
+- CLI test autostart: `--server` / `--client=IP`, `--prep=` `--seek=` overrides.
+- Recorder net tests: net_paint, net_check, net_shoot, net_caught, walk_loop.
+
+Two-instance test pattern:
+  godot --headless --path . scenes/game/net_game.tscn -- --server --test=... --no-quit &
+  godot --path . scenes/game/net_game.tscn -- --client=127.0.0.1 --record=... --screen=1
+
+KNOWN follow-ups (not yet built): late-join state sync (paint/caught of
+already-acted players), game modes (infection/double), scoring/results screen,
+internet relay (Steam/EOS) on top of the same gameplay code, freehand texture
+painting + per-part hitboxes.
 
 ## recorder tests (this project)
 
