@@ -38,7 +38,21 @@ func host() -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	print("[net] hosting on port ", PORT)
+	_apply_phase_overrides()
+	GameState.authoritative = true
+	GameState.phase_changed.connect(_on_phase_changed)
 	_add_player(1)  # host's own avatar
+	GameState.start_match()
+
+
+func _apply_phase_overrides() -> void:
+	# Optional CLI tuning for tests: --prep=SEC --seek=SEC
+	for arg in OS.get_cmdline_user_args():
+		var a := String(arg)
+		if a.begins_with("--prep="):
+			GameState.prep_seconds = float(a.substr("--prep=".length()))
+		elif a.begins_with("--seek="):
+			GameState.seek_seconds = float(a.substr("--seek=".length()))
 
 
 func join(ip: String) -> void:
@@ -48,6 +62,7 @@ func join(ip: String) -> void:
 		push_error("[net] failed to connect to %s: %s" % [ip, error_string(err)])
 		return
 	multiplayer.multiplayer_peer = peer
+	GameState.authoritative = false  # host drives phases; we just reflect them
 	print("[net] connecting to ", ip, ":", PORT)
 
 
@@ -55,6 +70,19 @@ func _on_peer_connected(id: int) -> void:
 	if multiplayer.is_server():
 		print("[net] peer connected: ", id)
 		_add_player(id)
+		# Bring the late joiner into the current phase.
+		_sync_phase.rpc_id(id, GameState.phase, GameState.time_left())
+
+
+func _on_phase_changed(phase: int) -> void:
+	if multiplayer.is_server():
+		_sync_phase.rpc(phase, GameState.time_left())
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _sync_phase(phase: int, time_left: float) -> void:
+	if multiplayer.get_remote_sender_id() == 1:
+		GameState.sync_phase(phase, time_left)
 
 
 func _on_peer_disconnected(id: int) -> void:
@@ -95,6 +123,21 @@ func _request_eliminate(target_id: int) -> void:
 		return
 	target.set_caught.rpc()
 	print("[net] eliminated hider ", target_id)
+	_check_all_caught()
+
+
+func _check_all_caught() -> void:
+	# Seekers win as soon as every hider has been found.
+	var hiders := 0
+	var caught := 0
+	for p in _players.get_children():
+		if p.role == NetPlayer.Role.HIDER:
+			hiders += 1
+			if p.caught:
+				caught += 1
+	if hiders > 0 and caught == hiders and GameState.phase == GameState.Phase.SEEK:
+		GameState.set_phase(GameState.Phase.RESULTS)
+		print("[net] all hiders caught -> RESULTS")
 
 
 func _spawn_pos(slot: int) -> Vector3:

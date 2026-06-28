@@ -48,6 +48,18 @@ func is_seeker() -> bool:
 	return role == Role.SEEKER
 
 
+## Seekers are locked at spawn during PREP and released for SEEK; hiders may
+## roam during PREP and SEEK but not after RESULTS.
+func _can_act() -> bool:
+	match GameState.phase:
+		GameState.Phase.SEEK:
+			return true
+		GameState.Phase.PREP:
+			return not is_seeker()
+		_:
+			return false
+
+
 func _enter_tree() -> void:
 	# Name is the owning peer id; set authority for the whole branch.
 	set_multiplayer_authority(name.to_int())
@@ -108,7 +120,7 @@ func _process(_delta: float) -> void:
 	if not _is_mine or caught:
 		return
 	if is_seeker():
-		if Input.is_action_just_pressed("fire"):
+		if Input.is_action_just_pressed("fire") and _can_act():
 			_fire()
 		return
 	# Hider menus.
@@ -154,7 +166,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not _is_mine:
 		return  # remote: position/rotation come from the synchronizer
-	if _menu_open or caught:
+	if _menu_open or caught or not _can_act():
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()

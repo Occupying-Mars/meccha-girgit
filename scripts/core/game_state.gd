@@ -19,6 +19,9 @@ enum Mode { NORMAL, INFECTION, DOUBLE }
 
 var mode: int = Mode.NORMAL
 var phase: int = Phase.ASSIGN
+## Host (or single-player) advances phases; clients only tick the display and
+## apply host-broadcast phase changes via sync_phase().
+var authoritative: bool = true
 var _time_left: float = 0.0
 var _running: bool = false
 
@@ -28,7 +31,7 @@ func _process(delta: float) -> void:
 		return
 	_time_left -= delta
 	phase_tick.emit(maxf(_time_left, 0.0))
-	if _time_left <= 0.0:
+	if _time_left <= 0.0 and authoritative:
 		_advance_phase()
 
 
@@ -49,6 +52,15 @@ func set_phase(new_phase: int) -> void:
 			_running = false
 	phase_changed.emit(phase)
 	print("[game_state] phase -> ", Phase.keys()[phase])
+
+
+## Clients apply host-broadcast phase + remaining time (no local advancement).
+func sync_phase(new_phase: int, seconds_left: float) -> void:
+	phase = new_phase
+	_time_left = seconds_left
+	_running = new_phase == Phase.PREP or new_phase == Phase.SEEK
+	phase_changed.emit(phase)
+	print("[game_state] (synced) phase -> ", Phase.keys()[phase])
 
 
 func _advance_phase() -> void:
