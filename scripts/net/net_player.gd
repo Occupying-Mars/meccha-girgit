@@ -33,6 +33,7 @@ const WALL_VSPEED := 1.1    # raise/lower speed while stuck
 const PAINT_MENU := preload("res://scenes/ui/freehand_paint_menu.tscn")
 const POSE_MENU := preload("res://scenes/ui/pose_menu.tscn")
 const SEEKER_HUD := preload("res://scenes/ui/net_seeker_hud.tscn")
+const PAUSE_MENU := preload("res://scenes/ui/pause_menu.tscn")
 
 enum Role { HIDER, SEEKER }
 
@@ -60,6 +61,8 @@ var _paint_menu: FreehandPaintMenu
 var _pose_menu: PoseMenu
 var _menu_open: bool = false
 var _seeker_hud: CanvasLayer
+var _pause_menu: PauseMenu
+var _pause_open: bool = false
 var caught: bool = false
 var _stuck: bool = false
 var _wall_normal: Vector3 = Vector3.ZERO
@@ -109,6 +112,9 @@ func _ready() -> void:
 		var controls := ControlsHud.new()
 		add_child(controls)
 		controls.show_for(is_seeker())
+		_pause_menu = PAUSE_MENU.instantiate()
+		add_child(_pause_menu)
+		_pause_menu.resumed.connect(_on_pause_resumed)
 	elif debug_remote:
 		# Remote players are driven by the synchronizer. Log their synced
 		# position periodically so headless tests can verify replication.
@@ -159,7 +165,18 @@ func _setup_menus() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not _is_mine or caught:
+	if not _is_mine:
+		return
+	# Esc: close an open paint/pose menu first, otherwise toggle the pause menu.
+	if Input.is_action_just_pressed("ui_cancel"):
+		if _paint_menu != null and _paint_menu.visible:
+			_paint_menu.close()
+		elif _pose_menu != null and _pose_menu.visible:
+			_pose_menu.close()
+		else:
+			_toggle_pause()
+		return
+	if _pause_open or caught:
 		return
 	if is_seeker():
 		if Input.is_action_just_pressed("fire") and _can_act():
@@ -184,11 +201,20 @@ func _process(_delta: float) -> void:
 		_toggle_menu(_paint_menu)
 	elif Input.is_action_just_pressed("pose_menu"):
 		_toggle_menu(_pose_menu)
-	elif Input.is_action_just_pressed("ui_cancel"):
-		if _paint_menu.visible:
-			_paint_menu.close()
-		elif _pose_menu.visible:
-			_pose_menu.close()
+
+
+func _toggle_pause() -> void:
+	if _pause_open:
+		_pause_menu.close()  # emits resumed -> _on_pause_resumed
+	else:
+		_pause_open = true
+		_pause_menu.open()
+
+
+func _on_pause_resumed() -> void:
+	_pause_open = false
+	if not _menu_open:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _toggle_menu(menu) -> void:
@@ -211,7 +237,7 @@ func _on_menu_closed() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _is_mine or _menu_open:
+	if not _is_mine or _menu_open or _pause_open:
 		return
 	if event is InputEventMouseMotion:
 		_yaw.rotate_y(-event.relative.x * mouse_sensitivity)
@@ -222,7 +248,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not _is_mine:
 		return  # remote: position/rotation come from the synchronizer
-	if _menu_open or caught or not _can_act():
+	if _menu_open or _pause_open or caught or not _can_act():
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()

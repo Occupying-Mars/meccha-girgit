@@ -44,7 +44,7 @@ The public test relay is unreliable, so **run your own**:
    **Relay** field:
    - same machine (two windows): `127.0.0.1:8890`
    - same Wi-Fi: `<host-LAN-IP>:8890`
-   - over the internet: run noray on a VPS / public IP and use that.
+   - over the internet: run noray on a VPS / public IP and use that — see docs/HOSTING_VPS.md.
 3. **Host** → share the **invite code (OID)**. Friends tick Online, enter the
    same relay address + the code, and **Join**.
 
