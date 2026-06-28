@@ -16,6 +16,9 @@ const VIS_RANGE := 30.0
 const SCORE_RATE := 60.0
 const VIEW_HALF_COS := 0.5  # ~60° half-cone
 
+## Where avatars spawn (per-map). Overridden in the scene for each arena.
+@export var spawn_base: Vector3 = Vector3(-5.0, 0.1, 6.0)
+
 @onready var _players: Node3D = $Players
 @onready var _spawner: MultiplayerSpawner = $MultiplayerSpawner
 
@@ -210,7 +213,7 @@ func _check_all_caught() -> void:
 
 
 func _spawn_pos(slot: int) -> Vector3:
-	# Spread spawns by join order so avatars never overlap (grid along z=6).
+	# Spread spawns by join order so avatars never overlap (grid from base).
 	var col := slot % 6
 	var row := slot / 6
-	return Vector3(-5.0 + float(col) * 2.0, 0.1, 6.0 + float(row) * 2.0)
+	return spawn_base + Vector3(float(col) * 2.0, 0.0, float(row) * 2.0)

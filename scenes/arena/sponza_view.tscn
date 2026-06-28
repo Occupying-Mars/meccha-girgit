@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3 uid="uid://n0sponzaview0"]
+
+[ext_resource type="Script" path="res://scripts/core/sponza_map.gd" id="1_sponza"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.7, 0.72, 1)
+ambient_light_energy = 0.7
+tonemap_mode = 2
+
+[node name="SponzaView" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Map" type="Node3D" parent="."]
+script = ExtResource("1_sponza")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 9, 2.5, 0)

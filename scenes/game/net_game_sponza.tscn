@@ -1,0 +1,42 @@
+[gd_scene load_steps=7 format=3 uid="uid://o0netsponza0"]
+
+[ext_resource type="Script" path="res://scripts/net/net_game.gd" id="1_netgame"]
+[ext_resource type="Script" path="res://scripts/core/sponza_map.gd" id="2_map"]
+[ext_resource type="PackedScene" uid="uid://i0roundhud0" path="res://scenes/ui/round_hud.tscn" id="3_hud"]
+[ext_resource type="PackedScene" uid="uid://m0results0" path="res://scenes/ui/results_screen.tscn" id="4_results"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.7, 0.72, 1)
+ambient_light_energy = 0.7
+tonemap_mode = 2
+
+[node name="NetGame" type="Node3D"]
+script = ExtResource("1_netgame")
+spawn_base = Vector3(-4, 0.6, -2)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 12, 0)
+shadow_enabled = true
+
+[node name="Map" type="Node3D" parent="."]
+script = ExtResource("2_map")
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+spawn_path = NodePath("../Players")
+
+[node name="RoundHud" parent="." instance=ExtResource("3_hud")]
+
+[node name="ResultsScreen" parent="." instance=ExtResource("4_results")]

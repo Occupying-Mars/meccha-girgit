@@ -29,3 +29,6 @@ Thumbs.db
 tools/mocap/__pycache__/
 
 # Recorder output (lives in /tmp, never committed)
+
+# Downloaded third-party map (fetch with tools/download_sponza.py)
+assets/arenas/sponza/
