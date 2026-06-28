@@ -59,7 +59,7 @@ func _refresh() -> void:
 		var sel := 0
 		var idx := 1
 		for id in NetSession.players:
-			var who := NetSession.players[id]
+			var who: String = NetSession.players[id]
 			if int(id) == 1:
 				who += " (you)"
 			_seeker_pick.add_item("Seeker: %s" % who, int(id))
