@@ -142,6 +142,9 @@ func _run_test_async() -> void:
 			# (net hider client.) Freehand-paint a stroke on the real scaled
 			# avatar via raycast from its own camera.
 			_net_paint_fh()
+		"net_whistle":
+			# (net hider client.) Trigger a whistle and show the popup.
+			_net_whistle()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -220,6 +223,18 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _net_whistle() -> void:
+	await get_tree().create_timer(0.3).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if p.is_multiplayer_authority() and not p.is_seeker():
+			p._do_whistle()
+			print("[recorder] net_whistle triggered on ", p.name)
+			return
 
 
 func _net_paint_fh() -> void:

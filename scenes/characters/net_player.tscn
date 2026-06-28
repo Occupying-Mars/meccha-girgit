@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/net/net_player.gd" id="1_net"]
 [ext_resource type="Script" path="res://scripts/hider/hider_body.gd" id="2_body"]
+[ext_resource type="AudioStream" path="res://audio/whistle.wav" id="3_whistle"]
 
 [sub_resource type="CapsuleShape3D" id="cap"]
 radius = 0.25
@@ -24,6 +25,13 @@ shape = SubResource("cap")
 
 [node name="HiderBody" type="Node3D" parent="."]
 script = ExtResource("2_body")
+
+[node name="Whistle" type="AudioStreamPlayer3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+stream = ExtResource("3_whistle")
+unit_size = 6.0
+max_distance = 45.0
+
 
 [node name="CameraYaw" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)

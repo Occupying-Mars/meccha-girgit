@@ -1,11 +1,15 @@
 extends Control
 ## Title screen: username, host (with mode) or join (with invite code).
 
-@onready var _username: LineEdit = $Center/VBox/UsernameRow/Username
-@onready var _mode: OptionButton = $Center/VBox/ModeRow/Mode
-@onready var _online: CheckBox = $Center/VBox/OnlineCheck
-@onready var _code: LineEdit = $Center/VBox/JoinRow/Code
-@onready var _status: Label = $Center/VBox/Status
+const ROOT := "Center/Card/Margin/VBox"
+
+@onready var _username: LineEdit = get_node(ROOT + "/UsernameRow/Username")
+@onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
+@onready var _online: CheckBox = get_node(ROOT + "/OnlineCheck")
+@onready var _code: LineEdit = get_node(ROOT + "/JoinRow/Code")
+@onready var _status: Label = get_node(ROOT + "/Status")
+@onready var _host_btn: Button = get_node(ROOT + "/HostBtn")
+@onready var _join_btn: Button = get_node(ROOT + "/JoinRow/JoinBtn")
 
 
 func _ready() -> void:
@@ -13,22 +17,22 @@ func _ready() -> void:
 	_mode.clear()
 	_mode.add_item("Random seeker", NetSession.Mode.RANDOM)
 	_mode.add_item("Decided seeker", NetSession.Mode.DECIDED)
-	$Center/VBox/HostBtn.pressed.connect(_on_host)
-	$Center/VBox/JoinRow/JoinBtn.pressed.connect(_on_join)
+	_host_btn.pressed.connect(_on_host)
+	_join_btn.pressed.connect(_on_join)
 
 
 func _set_busy(text: String) -> void:
-	_status.modulate = Color(0.8, 0.8, 1.0)
+	_status.add_theme_color_override("font_color", Color(0.6, 0.7, 1.0))
 	_status.text = text
-	$Center/VBox/HostBtn.disabled = true
-	$Center/VBox/JoinRow/JoinBtn.disabled = true
+	_host_btn.disabled = true
+	_join_btn.disabled = true
 
 
 func _set_error(text: String) -> void:
-	_status.modulate = Color(1, 0.6, 0.6)
+	_status.add_theme_color_override("font_color", Color(1, 0.42, 0.42))
 	_status.text = text
-	$Center/VBox/HostBtn.disabled = false
-	$Center/VBox/JoinRow/JoinBtn.disabled = false
+	_host_btn.disabled = false
+	_join_btn.disabled = false
 
 
 func _on_host() -> void:

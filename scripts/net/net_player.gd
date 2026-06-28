@@ -46,7 +46,13 @@ enum Role { HIDER, SEEKER }
 @onready var _camera: Camera3D = $CameraYaw/CameraPitch/SpringArm3D/Camera3D
 @onready var _muzzle: RayCast3D = $CameraYaw/CameraPitch/SpringArm3D/Camera3D/Muzzle
 @onready var _collision: CollisionShape3D = $CollisionShape3D
+@onready var _whistle: AudioStreamPlayer3D = $Whistle
 @onready var body: HiderBody = $HiderBody
+
+## Auto-whistle: every hider chirps after this long unless they whistle
+## manually first (which resets it). Host-toggleable in a fuller build.
+const AUTO_WHISTLE_SECS := 45.0
+var _auto_whistle_t: float = AUTO_WHISTLE_SECS
 
 var _is_mine: bool = false
 var _pitch_angle: float = -0.25
@@ -156,6 +162,13 @@ func _process(_delta: float) -> void:
 		if Input.is_action_just_pressed("fire") and _can_act():
 			_fire()
 		return
+	# Whistle (taunt): manual press + auto-whistle countdown during SEEK.
+	if GameState.phase == GameState.Phase.SEEK:
+		_auto_whistle_t -= _delta
+		if _auto_whistle_t <= 0.0:
+			_do_whistle()
+	if Input.is_action_just_pressed("taunt") and not _menu_open:
+		_do_whistle()
 	# Hider wall-stick toggle (F).
 	if Input.is_action_just_pressed("interact") and not _menu_open and _can_act():
 		if _stuck:
@@ -317,6 +330,36 @@ func _receive_paint(state: Dictionary) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _receive_pose(pose_name: String) -> void:
 	body.apply_pose(pose_name, false)
+
+
+## --- Whistle / taunt (3D positional, networked) ------------------------------
+
+func _do_whistle() -> void:
+	_auto_whistle_t = AUTO_WHISTLE_SECS  # whistling resets the auto timer
+	play_whistle.rpc()
+
+
+@rpc("authority", "call_local", "reliable")
+func play_whistle() -> void:
+	if _whistle.stream != null:
+		_whistle.play()
+	_whistle_popup()
+
+
+func _whistle_popup() -> void:
+	# Brief "♪" that floats up and fades above the whistler — a soft tell.
+	var note := Label3D.new()
+	note.text = "♪"
+	note.font_size = 96
+	note.pixel_size = 0.004
+	note.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	note.modulate = Color(1, 1, 1, 0.9)
+	note.position = Vector3(0, 0.85, 0)
+	add_child(note)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(note, "position:y", 1.4, 0.8)
+	tw.tween_property(note, "modulate:a", 0.0, 0.8)
+	tw.chain().tween_callback(note.queue_free)
 
 
 ## --- Seeker gun + elimination -----------------------------------------------

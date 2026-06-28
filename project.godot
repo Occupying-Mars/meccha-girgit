@@ -23,6 +23,10 @@ Recorder="*res://scripts/dev/recorder.gd"
 window/size/viewport_width=1280
 window/size/viewport_height=720
 
+[gui]
+
+theme/custom="res://assets/ui/theme.tres"
+
 [input]
 
 move_forward={

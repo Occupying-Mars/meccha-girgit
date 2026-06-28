@@ -1,6 +1,18 @@
-[gd_scene load_steps=2 format=3 uid="uid://p0mainmenu0"]
+[gd_scene load_steps=3 format=3 uid="uid://p0mainmenu0"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_menu"]
+
+[sub_resource type="StyleBoxFlat" id="card"]
+bg_color = Color(0.117647, 0.129412, 0.188235, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.227451, 0.247059, 0.34902, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -17,80 +29,146 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.13, 0.14, 0.18, 1)
+color = Color(0.0745098, 0.0823529, 0.121569, 1)
+
+[node name="Dots" type="HBoxContainer" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -110.0
+offset_top = 70.0
+offset_right = 110.0
+offset_bottom = 90.0
+grow_horizontal = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="D0" type="ColorRect" parent="Dots"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+color = Color(0.357, 0.878, 0.541, 1)
+
+[node name="D1" type="ColorRect" parent="Dots"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+color = Color(0.95, 0.6, 0.3, 1)
+
+[node name="D2" type="ColorRect" parent="Dots"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+color = Color(0.4, 0.6, 0.95, 1)
+
+[node name="D3" type="ColorRect" parent="Dots"]
+custom_minimum_size = Vector2(16, 16)
+layout_mode = 2
+color = Color(0.9, 0.4, 0.55, 1)
+
+[node name="Title" type="Label" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -360.0
+offset_top = 104.0
+offset_right = 360.0
+offset_bottom = 180.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.357, 0.878, 0.541, 1)
+theme_override_font_sizes/font_size = 60
+text = "MECCHA  CHAMELEON"
+horizontal_alignment = 1
+
+[node name="Sub" type="Label" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 172.0
+offset_right = 200.0
+offset_bottom = 196.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.604, 0.631, 0.733, 1)
+text = "hide · paint · pose · seek"
+horizontal_alignment = 1
 
 [node name="Center" type="CenterContainer" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = 70.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBox" type="VBoxContainer" parent="Center"]
-custom_minimum_size = Vector2(360, 0)
+[node name="Card" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_styles/panel = SubResource("card")
 
-[node name="Title" type="Label" parent="Center/VBox"]
+[node name="Margin" type="MarginContainer" parent="Center/Card"]
 layout_mode = 2
-horizontal_alignment = 1
-text = "MECCHA CHAMELEON"
+theme_override_constants/margin_left = 26
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 26
+theme_override_constants/margin_bottom = 24
 
-[node name="Subtitle" type="Label" parent="Center/VBox"]
+[node name="VBox" type="VBoxContainer" parent="Center/Card/Margin"]
 layout_mode = 2
-horizontal_alignment = 1
-text = "hide · paint · pose · seek"
+theme_override_constants/separation = 14
 
-[node name="UsernameRow" type="HBoxContainer" parent="Center/VBox"]
+[node name="UsernameRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
+theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="Center/VBox/UsernameRow"]
-custom_minimum_size = Vector2(90, 0)
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/UsernameRow"]
+custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
-text = "Username"
+text = "Name"
 
-[node name="Username" type="LineEdit" parent="Center/VBox/UsernameRow"]
+[node name="Username" type="LineEdit" parent="Center/Card/Margin/VBox/UsernameRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Player"
 placeholder_text = "your name"
 
-[node name="ModeRow" type="HBoxContainer" parent="Center/VBox"]
+[node name="ModeRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
+theme_override_constants/separation = 10
 
-[node name="Label" type="Label" parent="Center/VBox/ModeRow"]
-custom_minimum_size = Vector2(90, 0)
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/ModeRow"]
+custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 text = "Mode"
 
-[node name="Mode" type="OptionButton" parent="Center/VBox/ModeRow"]
+[node name="Mode" type="OptionButton" parent="Center/Card/Margin/VBox/ModeRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OnlineCheck" type="CheckBox" parent="Center/VBox"]
+[node name="OnlineCheck" type="CheckBox" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
 text = "Play over internet (relay)"
 
-[node name="HostBtn" type="Button" parent="Center/VBox"]
+[node name="HostBtn" type="Button" parent="Center/Card/Margin/VBox"]
+custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 text = "HOST GAME"
 
-[node name="Sep" type="HSeparator" parent="Center/VBox"]
+[node name="Sep" type="HSeparator" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
 
-[node name="JoinRow" type="HBoxContainer" parent="Center/VBox"]
+[node name="JoinRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
+theme_override_constants/separation = 10
 
-[node name="Code" type="LineEdit" parent="Center/VBox/JoinRow"]
+[node name="Code" type="LineEdit" parent="Center/Card/Margin/VBox/JoinRow"]
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "invite code"
 
-[node name="JoinBtn" type="Button" parent="Center/VBox/JoinRow"]
+[node name="JoinBtn" type="Button" parent="Center/Card/Margin/VBox/JoinRow"]
+custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
 text = "JOIN"
 
-[node name="Status" type="Label" parent="Center/VBox"]
+[node name="Status" type="Label" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.604, 0.631, 0.733, 1)
 horizontal_alignment = 1
-modulate = Color(1, 0.6, 0.6, 1)
