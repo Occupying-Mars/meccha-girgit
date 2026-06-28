@@ -63,7 +63,26 @@ func join(ip: String) -> void:
 		return
 	multiplayer.multiplayer_peer = peer
 	GameState.authoritative = false  # host drives phases; we just reflect them
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	print("[net] connecting to ", ip, ":", PORT)
+
+
+func _on_connected_to_server() -> void:
+	# Our avatars are spawned by now; ask the host to replay everyone's state.
+	_request_full_state.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_full_state() -> void:
+	if not multiplayer.is_server():
+		return
+	var who := multiplayer.get_remote_sender_id()
+	for p in _players.get_children():
+		if p.name == str(who):
+			continue  # the joiner's own avatar is still blank
+		# Host's copy already has each player's broadcast paint/pose/caught.
+		p.sync_full_state.rpc_id(who, p.body.get_paint_state(), p.body.current_pose, p.caught)
+	print("[net] replayed state to late joiner ", who)
 
 
 func _on_peer_connected(id: int) -> void:

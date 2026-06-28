@@ -254,9 +254,26 @@ func set_caught() -> void:
 	var sender := multiplayer.get_remote_sender_id()
 	if sender != 1 and sender != 0:
 		return
+	_apply_caught()
+
+
+func _apply_caught() -> void:
 	if caught:
 		return
 	caught = true
 	for part_name in body.part_names():
 		body.set_part_color(part_name, Color(0.9, 0.1, 0.1))
 	print("[net_player] caught: ", name)
+
+
+## Host-only: push this avatar's full current state to a late joiner so it
+## sees paint/pose/caught that happened before it connected. Goes through the
+## same get/apply_paint_state path, so it survives the freehand-paint upgrade.
+@rpc("any_peer", "call_remote", "reliable")
+func sync_full_state(paint: Dictionary, pose_name: String, is_caught: bool) -> void:
+	if multiplayer.get_remote_sender_id() != 1:
+		return
+	body.apply_paint_state(paint)
+	body.apply_pose(pose_name, false)
+	if is_caught:
+		_apply_caught()
