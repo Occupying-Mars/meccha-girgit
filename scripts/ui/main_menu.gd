@@ -6,6 +6,8 @@ const ROOT := "Center/Card/Margin/VBox"
 @onready var _username: LineEdit = get_node(ROOT + "/UsernameRow/Username")
 @onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
 @onready var _online: CheckBox = get_node(ROOT + "/OnlineCheck")
+@onready var _relay_row: HBoxContainer = get_node(ROOT + "/RelayRow")
+@onready var _relay: LineEdit = get_node(ROOT + "/RelayRow/Relay")
 @onready var _code: LineEdit = get_node(ROOT + "/JoinRow/Code")
 @onready var _status: Label = get_node(ROOT + "/Status")
 @onready var _host_btn: Button = get_node(ROOT + "/HostBtn")
@@ -19,6 +21,7 @@ func _ready() -> void:
 	_mode.add_item("Decided seeker", NetSession.Mode.DECIDED)
 	_host_btn.pressed.connect(_on_host)
 	_join_btn.pressed.connect(_on_join)
+	_online.toggled.connect(func (on): _relay_row.visible = on)
 
 
 func _set_busy(text: String) -> void:
@@ -36,6 +39,7 @@ func _set_error(text: String) -> void:
 
 
 func _on_host() -> void:
+	NetSession.relay_address = _relay.text if _online.button_pressed else ""
 	_set_busy("Connecting to relay…" if _online.button_pressed else "Hosting…")
 	var err: int = await NetSession.host_game(_username.text, _mode.get_selected_id(), _online.button_pressed)
 	if err != OK:
@@ -45,6 +49,7 @@ func _on_host() -> void:
 
 
 func _on_join() -> void:
+	NetSession.relay_address = _relay.text if _online.button_pressed else ""
 	_set_busy("Connecting…")
 	var err: int = await NetSession.join_game(_username.text, _code.text, _online.button_pressed)
 	if err != OK:

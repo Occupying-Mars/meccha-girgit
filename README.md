@@ -32,3 +32,21 @@ godot --path . -- --record=NAME --screen=1 [--test=] # capture frames
 Recorder output goes to `/tmp/meccha_runs/` (note: NOT `thegame_runs`).
 See `tools/README.md` for the full recorder + Blender + Godot CLI reference
 (inherited from the parent project).
+
+## Internet play (relay)
+
+Online host/join uses a [Noray](https://github.com/foxssake/noray) relay
+(NAT-punchthrough + relay fallback) so friends join without port-forwarding.
+The public test relay is unreliable, so **run your own**:
+
+1. `./tools/run_relay.sh` — clones + runs noray, prints your LAN IP.
+2. In the menu, tick **Play over internet** and put the relay's address in the
+   **Relay** field:
+   - same machine (two windows): `127.0.0.1:8890`
+   - same Wi-Fi: `<host-LAN-IP>:8890`
+   - over the internet: run noray on a VPS / public IP and use that.
+3. **Host** → share the **invite code (OID)**. Friends tick Online, enter the
+   same relay address + the code, and **Join**.
+
+Validated end-to-end against a self-hosted noray; all gameplay runs over it
+exactly like LAN.

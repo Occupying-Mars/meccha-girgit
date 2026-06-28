@@ -34,6 +34,9 @@ var players: Dictionary = {}
 var online: bool = false
 var online_oid: String = ""   # host's relay id == the online invite code
 var host_oid: String = ""     # (client) the host's oid we're joining
+## Relay server to use (host:port). Empty -> --noray CLI / default const.
+## The public test relay is unreliable; point this at your own noray.
+var relay_address: String = ""
 
 
 ## --- Connection -------------------------------------------------------------
@@ -81,13 +84,19 @@ func join_game(uname: String, code: String, want_online: bool = false) -> int:
 ## --- Internet relay via Noray (NAT punchthrough + relay fallback) ------------
 
 func _noray_endpoint() -> Dictionary:
-	# Optional override for testing/self-hosting: --noray=HOST[:PORT]
+	# Priority: in-game relay field > --noray CLI override > default const.
+	if relay_address.strip_edges() != "":
+		return _split_endpoint(relay_address)
 	for raw in OS.get_cmdline_user_args():
 		var a := String(raw)
 		if a.begins_with("--noray="):
-			var hp := a.substr("--noray=".length()).split(":")
-			return {"host": hp[0], "port": int(hp[1]) if hp.size() > 1 else NORAY_PORT}
+			return _split_endpoint(a.substr("--noray=".length()))
 	return {"host": NORAY_HOST, "port": NORAY_PORT}
+
+
+func _split_endpoint(s: String) -> Dictionary:
+	var hp := s.strip_edges().split(":")
+	return {"host": hp[0], "port": int(hp[1]) if hp.size() > 1 else NORAY_PORT}
 
 
 func _noray_register() -> int:

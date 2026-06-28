@@ -146,6 +146,21 @@ size_flags_horizontal = 3
 layout_mode = 2
 text = "Play over internet (relay)"
 
+[node name="RelayRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/RelayRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Relay"
+
+[node name="Relay" type="LineEdit" parent="Center/Card/Margin/VBox/RelayRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "your noray host:port"
+
 [node name="HostBtn" type="Button" parent="Center/Card/Margin/VBox"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
