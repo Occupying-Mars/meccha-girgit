@@ -27,10 +27,35 @@ Key difference: recorder output dir is `/tmp/meccha_runs/` (not `thegame_runs`).
 Dev loop: edit → `godot --headless --quit` → `godot --path . -- --record=NAME
 --screen=1 [--test=NAME]` → Read the PNG. Always `--screen=1` on the dev machine.
 
-## current state
+## current state (single-player core complete; multiplayer is next, user-directed)
 
-- `scenes/game/test_arena.tscn` is the main scene: procedural colored arena +
-  one third-person hider blob.
-- Hider blob is procedural primitive parts (`scripts/hider/hider_body.gd`) so
-  each body part colors independently — PHASE 1 painting is color-block per
-  part; freehand texture painting is a later upgrade.
+Scenes:
+- `scenes/game/test_arena.tscn` (main) — colored arena + playable hider +
+  round HUD; starts a match (prep countdown).
+- `scenes/game/seeker_test.tscn` — arena + camouflaged dummies + FP seeker.
+
+Done & verified (via recorder):
+- Arena: `arena_builder.gd` procedural colored test bed.
+- Hider: `hider_controller.gd` third-person roam + orbit cam.
+- Painting: `paint_menu` — per-part color (wheel/RGB/HSV/hex), metallic +
+  roughness gloss, eyedropper ("spoid") raycast world sampler (P to open).
+- Poses: `pose_library.gd` + `pose_menu` — stand/crouch/ball/lie_flat/
+  wall_flatten (Tab to open). Data-driven; add a pose to the dict.
+- Seeker: `seeker_controller.gd` FP hitscan gun, `seeker_hud` crosshair +
+  counters; `hider_dummy` painted/posed targets that eliminate() on hit.
+- Round loop: `game_state.gd` (assign→prep→seek→results) + `round_hud`.
+
+PHASE-1 caveat: painting is color-block per body PART, not freehand texture
+paint. Body is procedural primitive parts (`hider_body.gd`). Freehand
+texture painting + per-part hitboxes (so shots match posed visuals) are
+planned upgrades.
+
+NEXT: multiplayer (peer/host) — the user will direct this. GameState +
+match_runner + round_hud were built host-authoritative-friendly so a
+MultiplayerSpawner/Synchronizer layer can drop on top.
+
+## recorder tests (this project)
+
+`--test=`: walk_forward/back/diag, jump, fire, look_left/right, look_walk,
+paint_demo, pose (with `--pose=NAME`). Output: `/tmp/meccha_runs/<name>/`.
+Non-default scene: `godot --path . scenes/game/seeker_test.tscn -- --record=...`.

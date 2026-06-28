@@ -13,12 +13,13 @@ from the parent `thegame` project — see `tools/README.md`.
 
 1. **Arena** — colored test environment (camouflage test bed). ✅
 2. **Hider** — third-person blob, roam movement. ✅
-3. **Painting** — color individual body parts; color wheel / RGB / HSV;
-   gloss sliders; eyedropper ("spoid") that samples world surface colors.
-4. **Poses** — curl, crouch, lie flat, wall-flatten (+ unstick).
-5. **Seeker** — first-person camera + gun, shoot to eliminate.
-6. **Round loop** — assign → prep → seek → results.
-7. **Multiplayer** — peer/host (later, user-directed).
+3. **Painting** — per body part: color (wheel/RGB/HSV/hex), metallic+roughness
+   gloss, eyedropper ("spoid") that samples world surface colors. ✅
+   (Phase 1 = color-block per part; freehand texture paint is a later upgrade.)
+4. **Poses** — stand/crouch/ball/lie-flat/wall-flatten (data-driven, extensible). ✅
+5. **Seeker** — first-person camera + hitscan gun, shoot to eliminate. ✅
+6. **Round loop** — assign → prep → seek → results (phase/timer HUD). ✅
+7. **Multiplayer** — peer/host (NEXT, user-directed).
 
 ## Dev loop
 
