@@ -245,7 +245,9 @@ func start_game() -> void:
 	if ids.is_empty():
 		return
 	var sid := decided_seeker_id if mode == Mode.DECIDED else int(ids[randi() % ids.size()])
-	if not players.has(sid):
+	# sid == 0 means "nobody seeks" (everyone hides) — keep it; only fix
+	# genuinely invalid non-zero ids.
+	if sid != 0 and not players.has(sid):
 		sid = int(ids[0])
 	_begin.rpc(sid)
 	_begin(sid)  # host runs it too

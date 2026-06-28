@@ -53,8 +53,20 @@ func _refresh() -> void:
 
 	if _seeker_pick.visible:
 		_seeker_pick.clear()
+		# Pick who seeks — including "nobody", so the host can be a hider even
+		# when alone (everyone hides; seeker can join/seek later).
+		_seeker_pick.add_item("Seeker: nobody (everyone hides)", 0)
+		var sel := 0
+		var idx := 1
 		for id in NetSession.players:
-			_seeker_pick.add_item("Seeker: %s" % NetSession.players[id], int(id))
+			var who := NetSession.players[id]
+			if int(id) == 1:
+				who += " (you)"
+			_seeker_pick.add_item("Seeker: %s" % who, int(id))
+			if int(id) == NetSession.decided_seeker_id:
+				sel = idx
+			idx += 1
+		_seeker_pick.select(sel)
 
 
 func _on_seeker_pick(index: int) -> void:
