@@ -67,6 +67,10 @@ text = "Mode"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="OnlineCheck" type="CheckBox" parent="Center/VBox"]
+layout_mode = 2
+text = "Play over internet (relay)"
+
 [node name="HostBtn" type="Button" parent="Center/VBox"]
 layout_mode = 2
 text = "HOST GAME"

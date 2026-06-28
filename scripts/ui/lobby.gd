@@ -24,7 +24,7 @@ func _ready() -> void:
 	var host := NetSession.is_host
 	_start.visible = host
 	_waiting.visible = not host
-	_code.text = "Invite code:  %s" % NetSession.make_invite() if host else "Connected — waiting in lobby"
+	_code.text = "Invite code:  %s" % NetSession.invite_code() if host else "Connected — waiting in lobby"
 	_mode.text = "Mode:  %s" % ("Random seeker" if NetSession.mode == NetSession.Mode.RANDOM else "Decided seeker")
 	_seeker_pick.visible = host and NetSession.mode == NetSession.Mode.DECIDED
 

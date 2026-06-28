@@ -13,6 +13,8 @@ config/features=PackedStringArray("4.6", "Forward Plus")
 [autoload]
 
 GameState="*res://scripts/core/game_state.gd"
+Noray="*res://addons/netfox.noray/noray.gd"
+PacketHandshake="*res://addons/netfox.noray/packet-handshake.gd"
 NetSession="*res://scripts/net/net_session.gd"
 Recorder="*res://scripts/dev/recorder.gd"
 

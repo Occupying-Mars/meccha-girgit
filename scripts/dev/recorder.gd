@@ -30,6 +30,7 @@ var screen_index: int = -1
 var print_screens: bool = false
 var test_name: String = ""
 var pose_arg: String = ""
+var oid_arg: String = ""
 
 var _out_dir: String = ""
 
@@ -127,6 +128,12 @@ func _run_test_async() -> void:
 		"menu_join":
 			# Join the host via an invite code and report assigned role.
 			_menu_join()
+		"online_host":
+			# Host over the Noray internet relay; print the OID invite code.
+			_online_host()
+		"online_join":
+			# Join the relay host given by --oid=OID.
+			_online_join()
 		"paint_stroke":
 			# (paint_test scene.) Brush a stroke down the blob to verify
 			# freehand surface painting renders.
@@ -252,6 +259,32 @@ func _paint_stroke() -> void:
 		scene.demo_stroke()
 		await get_tree().create_timer(0.15).timeout
 	print("[recorder] paint_stroke done")
+
+
+func _online_host() -> void:
+	var err: int = await NetSession.host_game("HostUser", NetSession.Mode.DECIDED, true)
+	print("[recorder] online_host err=%s OID=%s" % [error_string(err), NetSession.online_oid])
+	if err != OK:
+		return
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(12.0).timeout
+	print("[recorder] online_host roster: ", NetSession.players)
+	NetSession.decided_seeker_id = 1
+	NetSession.start_game()
+	await get_tree().create_timer(2.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players != null:
+		for p in players.get_children():
+			print("[recorder] online_host spawned %s role=%d" % [p.name, p.role])
+
+
+func _online_join() -> void:
+	await get_tree().create_timer(0.5).timeout
+	var err: int = await NetSession.join_game("GuestUser", oid_arg, true)
+	print("[recorder] online_join err=%s (oid=%s)" % [error_string(err), oid_arg])
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(10.0).timeout
+	print("[recorder] online_join roster: ", NetSession.players)
 
 
 func _menu_host() -> void:
@@ -405,6 +438,8 @@ func _parse_args() -> void:
 			test_name = arg.substr("--test=".length())
 		elif arg.begins_with("--pose="):
 			pose_arg = arg.substr("--pose=".length())
+		elif arg.begins_with("--oid="):
+			oid_arg = arg.substr("--oid=".length())
 
 
 func _dump_screens() -> void:

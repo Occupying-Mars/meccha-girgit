@@ -17,6 +17,9 @@ enum Mode { RANDOM, DECIDED }
 const PORT := 24565
 const MAX_PLAYERS := 12
 const GAME_SCENE := "res://scenes/game/net_game_sponza.tscn"
+## Public Noray test relay (no accounts). Self-host for shipping.
+const NORAY_HOST := "tomfol.io"
+const NORAY_PORT := 8890
 
 var active: bool = false
 var is_host: bool = false
@@ -27,14 +30,22 @@ var seeker_id: int = 1
 ## id -> username
 var players: Dictionary = {}
 
+## Internet relay (Noray) vs LAN/direct-IP.
+var online: bool = false
+var online_oid: String = ""   # host's relay id == the online invite code
+var host_oid: String = ""     # (client) the host's oid we're joining
+
 
 ## --- Connection -------------------------------------------------------------
 
-func host_game(uname: String, game_mode: int) -> int:
+func host_game(uname: String, game_mode: int, want_online: bool = false) -> int:
 	username = _clean_name(uname)
 	mode = game_mode
 	is_host = true
 	decided_seeker_id = 1
+	online = want_online
+	if want_online:
+		return await _host_online()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, MAX_PLAYERS)
 	if err != OK:
@@ -47,9 +58,12 @@ func host_game(uname: String, game_mode: int) -> int:
 	return OK
 
 
-func join_game(uname: String, code: String) -> int:
+func join_game(uname: String, code: String, want_online: bool = false) -> int:
 	username = _clean_name(uname)
 	is_host = false
+	online = want_online
+	if want_online:
+		return await _join_online(code.strip_edges())
 	var info := parse_invite(code)
 	if info.is_empty():
 		return ERR_INVALID_PARAMETER
@@ -62,6 +76,122 @@ func join_game(uname: String, code: String) -> int:
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.server_disconnected.connect(_reset)
 	return OK
+
+
+## --- Internet relay via Noray (NAT punchthrough + relay fallback) ------------
+
+func _noray_endpoint() -> Dictionary:
+	# Optional override for testing/self-hosting: --noray=HOST[:PORT]
+	for raw in OS.get_cmdline_user_args():
+		var a := String(raw)
+		if a.begins_with("--noray="):
+			var hp := a.substr("--noray=".length()).split(":")
+			return {"host": hp[0], "port": int(hp[1]) if hp.size() > 1 else NORAY_PORT}
+	return {"host": NORAY_HOST, "port": NORAY_PORT}
+
+
+func _noray_register() -> int:
+	# Connect to the relay, get our ids, and register our remote address.
+	var ep := _noray_endpoint()
+	var err: int = await Noray.connect_to_host(ep["host"], ep["port"])
+	if err != OK:
+		return err
+	Noray.register_host()
+	# Poll for the PID rather than awaiting on_pid — noray can emit it during
+	# the connect step (before we'd await the signal), so the signal is missed.
+	var waited := 0.0
+	while Noray.pid == "" and waited < 10.0:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	if Noray.pid == "":
+		push_error("[net] noray: no PID — relay handshake failed/timed out")
+		return ERR_TIMEOUT
+	err = await Noray.register_remote()
+	return err
+
+
+func _host_online() -> int:
+	var err := await _noray_register()
+	if err != OK:
+		return err
+	online_oid = Noray.oid  # this is the invite code
+	if not Noray.on_connect_nat.is_connected(_host_handshake):
+		Noray.on_connect_nat.connect(_host_handshake)
+		Noray.on_connect_relay.connect(_host_handshake)
+	var peer := ENetMultiplayerPeer.new()
+	err = peer.create_server(Noray.local_port)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING:
+		await get_tree().process_frame
+	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return FAILED
+	multiplayer.server_relay = true
+	active = true
+	players = {1: username}
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	players_changed.emit()
+	return OK
+
+
+func _host_handshake(address: String, port: int) -> void:
+	# A peer wants in — punch a hole so ENet can accept them.
+	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if peer != null:
+		await PacketHandshake.over_enet_peer(peer, address, port)
+
+
+func _join_online(oid: String) -> int:
+	host_oid = oid
+	var err := await _noray_register()
+	if err != OK:
+		return err
+	active = true
+	if not Noray.on_connect_nat.is_connected(_client_connect_nat):
+		Noray.on_connect_nat.connect(_client_connect_nat)
+		Noray.on_connect_relay.connect(_client_connect_relay)
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.server_disconnected.connect(_reset)
+	Noray.connect_nat(oid)  # connection completes async via the handlers
+	return OK
+
+
+func _client_connect_nat(address: String, port: int) -> void:
+	var err := await _client_connect(address, port)
+	if err != OK:  # NAT punch failed — fall back to the relay
+		Noray.connect_relay(host_oid)
+
+
+func _client_connect_relay(address: String, port: int) -> void:
+	await _client_connect(address, port)
+
+
+func _client_connect(address: String, port: int) -> int:
+	# Handshake from our registered local port, then ENet-connect through it.
+	var udp := PacketPeerUDP.new()
+	udp.bind(Noray.local_port)
+	udp.set_dest_address(address, port)
+	var err := await PacketHandshake.over_packet_peer(udp)
+	udp.close()
+	if err != OK and err != ERR_BUSY:
+		return err
+	var peer := ENetMultiplayerPeer.new()
+	err = peer.create_client(address, port, 0, 0, 0, Noray.local_port)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING:
+		await get_tree().process_frame
+	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		multiplayer.multiplayer_peer = null
+		return ERR_CANT_CONNECT
+	return OK
+
+
+## Invite code: the relay OID online, or the encoded host IP on LAN.
+func invite_code() -> String:
+	return online_oid if online else make_invite()
 
 
 func _on_connected_to_server() -> void:
