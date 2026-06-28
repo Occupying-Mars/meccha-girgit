@@ -67,10 +67,24 @@ Two-instance test pattern:
   godot --headless --path . scenes/game/net_game.tscn -- --server --test=... --no-quit &
   godot --path . scenes/game/net_game.tscn -- --client=127.0.0.1 --record=... --screen=1
 
-KNOWN follow-ups (not yet built): late-join state sync (paint/caught of
-already-acted players), game modes (infection/double), scoring/results screen,
-internet relay (Steam/EOS) on top of the same gameplay code, freehand texture
-painting + per-part hitboxes.
+Also built & verified since:
+- Late-join state sync (paint/pose/caught replayed to joiners).
+- Results screen + hide-in-plain-sight scoring (host LOS+proximity).
+- Hiders 1/3 seeker size + slower (net_player HIDER_SCALE/SPEED).
+- Real wall-stick: F clings flush to a wall, WASD climbs, F unsticks.
+- Real map: Khronos Sponza (tools/download_sponza.py — NOT committed,
+  gitignored; run it then import). net_game_sponza.tscn. spawn_base per-map.
+- Main menu + lobby: net_session.gd autoload (usernames, invite code from
+  host IP:port, RANDOM/DECIDED seeker assignment at start). main_menu.tscn,
+  lobby.tscn. Main scene is now main_menu.tscn; lobby's game = net_game_sponza.
+
+Entry modes: SESSION (menu/lobby drives it, NetSession.active) vs CLI TEST
+(net_game self-hosts from --server/--client; NetSession inactive; existing
+recorder tests use this — net_game.tscn primitive arena).
+
+KNOWN follow-ups (not yet built): game modes (infection/double), internet
+relay (Steam/EOS) on top of the same gameplay code, freehand texture painting
++ per-part hitboxes, brighter Sponza lighting / spawn tuning.
 
 ## recorder tests (this project)
 
