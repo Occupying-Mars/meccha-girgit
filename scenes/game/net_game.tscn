@@ -34,5 +34,4 @@ script = ExtResource("2_arena")
 [node name="Players" type="Node3D" parent="."]
 
 [node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
-_spawnable_scenes = PackedStringArray("res://scenes/characters/net_player.tscn")
 spawn_path = NodePath("../Players")

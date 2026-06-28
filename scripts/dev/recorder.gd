@@ -108,6 +108,12 @@ func _run_test_async() -> void:
 			# (Run on a client.) Log remote avatars' torso color + pose to
 			# verify paint/pose replication arrived.
 			_net_check()
+		"net_shoot":
+			# (Run on the host/seeker.) Aim at a hider and fire.
+			_net_shoot()
+		"net_caught":
+			# (Run on a client/hider.) Log own caught state.
+			_net_caught()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -162,6 +168,40 @@ func _net_paint() -> void:
 		p.body.apply_pose("crouch", false)
 		p._broadcast_pose("crouch")
 		print("[recorder] net_paint: painted+posed local avatar ", p.name)
+
+
+func _net_shoot() -> void:
+	await get_tree().create_timer(3.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	var seeker = null
+	var hider = null
+	for p in players.get_children():
+		if p.is_seeker():
+			seeker = p
+		elif p.role == 0:
+			hider = p
+	if seeker == null or hider == null:
+		push_warning("[recorder] net_shoot: need a seeker and a hider")
+		return
+	print("[recorder] net_shoot seeker@%s hider@%s" % [seeker.global_position, hider.global_position])
+	# Aim the seeker's camera yaw at the hider's torso, then fire.
+	seeker._yaw.look_at(hider.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+	await get_tree().process_frame
+	await get_tree().physics_frame
+	seeker._fire()
+	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _net_caught() -> void:
+	await get_tree().create_timer(5.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if p.is_multiplayer_authority():
+			print("[recorder] net_caught: local hider ", p.name, " caught=", p.caught)
 
 
 func _net_check() -> void:
