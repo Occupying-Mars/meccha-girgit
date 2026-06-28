@@ -60,16 +60,16 @@ static func _build() -> Dictionary:
 				"arm_r": _xf(Vector3(0.24, 1.10, 0), Vector3.ZERO, Vector3(1, 1, 1)),
 			},
 		},
-		# Flatten against a wall, spread-eagle: thin front-to-back, arms and
-		# legs spread wide so the body becomes a flat painted patch.
+		# Flatten against a wall: thinned front-to-back, arms pressed in at the
+		# sides and legs together so it stays a cohesive flat patch (no gaps).
 		"wall_flatten": {
-			"root": _xf(Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.4)),
+			"root": _xf(Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.38)),
 			"parts": {
-				"head": _xf(Vector3(0, 1.56, 0)),
-				"arm_l": _xf(Vector3(-0.44, 1.30, 0), Vector3(0, 0, 60)),
-				"arm_r": _xf(Vector3(0.44, 1.30, 0), Vector3(0, 0, -60)),
-				"leg_l": _xf(Vector3(-0.26, 0.42, 0), Vector3(0, 0, 18)),
-				"leg_r": _xf(Vector3(0.26, 0.42, 0), Vector3(0, 0, -18)),
+				"head": _xf(Vector3(0, 1.54, 0)),
+				"arm_l": _xf(Vector3(-0.26, 1.06, 0), Vector3(0, 0, 8)),
+				"arm_r": _xf(Vector3(0.26, 1.06, 0), Vector3(0, 0, -8)),
+				"leg_l": _xf(Vector3(-0.09, 0.42, 0)),
+				"leg_r": _xf(Vector3(0.09, 0.42, 0)),
 			},
 		},
 	}

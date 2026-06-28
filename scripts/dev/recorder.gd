@@ -288,16 +288,15 @@ func _net_stick() -> void:
 	for p in players.get_children():
 		if not p.is_multiplayer_authority() or p.is_seeker():
 			continue
-		# Stand east of the central pillar (x in [-0.5,0.5]) and look at it.
-		p.global_position = Vector3(1.2, 0.1, 0.0)
-		await get_tree().physics_frame
-		p._yaw.look_at(Vector3(0, 0.4, 0), Vector3.UP)
+		# Approach the flat RED perimeter wall (face at z = -11.75) from +z,
+		# camera level and facing -z — the natural way a player walks up to it.
+		p.global_position = Vector3(0, 0.1, -10.6)
+		p._yaw.rotation.y = 0.0
+		p._pitch.rotation.x = 0.0
+		p._pitch_angle = 0.0
 		await get_tree().physics_frame
 		p._try_stick()
-		await get_tree().create_timer(0.4).timeout
-		# Rotate the camera to a side/profile view so the wall gap is visible.
-		var n: Vector3 = p._wall_normal
-		p._yaw.rotation.y = atan2(n.x, n.z) + PI * 0.5
+		await get_tree().create_timer(0.5).timeout
 		print("[recorder] net_stick stuck=%s pose=%s pos=%s"
 			% [p._stuck, p.body.current_pose, str(p.global_position)])
 		return

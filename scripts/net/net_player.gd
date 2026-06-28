@@ -18,7 +18,7 @@ const SEEKER_SPEED := 5.0
 ## Wall-stick (hiders): flatten FLUSH against a wall to hide as wall-art.
 ## Once stuck you only adjust height (raise/lower) to line up with a frame/
 ## shelf; you don't free-climb. Release to detach (MECCHA behaviour).
-const STICK_RANGE := 1.0
+const STICK_RANGE := 2.2    # forgiving reach; sticking snaps you flush anyway
 const WALL_OFFSET := 0.045  # flush: half the flattened body's depth
 const WALL_VSPEED := 1.1    # raise/lower speed while stuck
 
