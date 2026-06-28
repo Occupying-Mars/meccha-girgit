@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=3 uid="uid://h0seekertest0"]
+
+[ext_resource type="Script" path="res://scripts/core/arena_builder.gd" id="1_arena"]
+[ext_resource type="PackedScene" uid="uid://f0hiderdummy0" path="res://scenes/characters/hider_dummy.tscn" id="2_dummy"]
+[ext_resource type="PackedScene" uid="uid://g0seeker0scene0" path="res://scenes/characters/seeker.tscn" id="3_seeker"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_horizon_color = Color(0.65, 0.65, 0.7, 1)
+ground_horizon_color = Color(0.65, 0.65, 0.7, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.6, 0.6, 0.65, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 2
+
+[node name="SeekerTest" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Arena" type="Node3D" parent="."]
+script = ExtResource("1_arena")
+
+[node name="EasyTarget" parent="." instance=ExtResource("2_dummy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2)
+
+[node name="RedFlatten" parent="." instance=ExtResource("2_dummy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, -7)
+camo = Color(0.7, 0.3, 0.28, 1)
+head_color = Color(0.7, 0.3, 0.28, 1)
+pose = "wall_flatten"
+
+[node name="BlueCrouch" parent="." instance=ExtResource("2_dummy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 4)
+camo = Color(0.28, 0.45, 0.68, 1)
+head_color = Color(0.28, 0.45, 0.68, 1)
+pose = "crouch"
+
+[node name="PillarHide" parent="." instance=ExtResource("2_dummy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4, 0, -1.4)
+camo = Color(0.55, 0.5, 0.62, 1)
+head_color = Color(0.55, 0.5, 0.62, 1)
+
+[node name="Seeker" parent="." instance=ExtResource("3_seeker")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 9)

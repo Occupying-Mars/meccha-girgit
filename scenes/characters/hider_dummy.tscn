@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3 uid="uid://f0hiderdummy0"]
+
+[ext_resource type="Script" path="res://scripts/hider/hider_dummy.gd" id="1_dummy"]
+[ext_resource type="Script" path="res://scripts/hider/hider_body.gd" id="2_body"]
+
+[sub_resource type="CapsuleShape3D" id="cap"]
+radius = 0.3
+height = 1.75
+
+[node name="HiderDummy" type="StaticBody3D"]
+script = ExtResource("1_dummy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.88, 0)
+shape = SubResource("cap")
+
+[node name="HiderBody" type="Node3D" parent="."]
+script = ExtResource("2_body")
