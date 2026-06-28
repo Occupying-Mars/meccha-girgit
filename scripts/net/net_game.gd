@@ -64,6 +64,8 @@ func _start_cli_mode() -> void:
 func _on_session_started() -> void:
 	if multiplayer.is_server():
 		_started = true
+		GameState.prep_seconds = NetSession.prep_seconds
+		GameState.seek_seconds = NetSession.seek_seconds
 		for id in NetSession.players.keys():
 			_add_player(int(id))
 		GameState.start_match()
@@ -236,6 +238,18 @@ func _request_eliminate(target_id: int) -> void:
 	target.set_caught.rpc()
 	print("[net] eliminated hider ", target_id)
 	_check_all_caught()
+
+
+## Host-only: clear the round and start a fresh one (from the results menu).
+func restart_match() -> void:
+	if not multiplayer.is_server():
+		return
+	for p in _players.get_children():
+		p.queue_free()
+	_started = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_on_session_started()  # respawns everyone + start_match (re-applies durations)
 
 
 func _check_all_caught() -> void:

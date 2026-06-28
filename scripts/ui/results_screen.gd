@@ -13,6 +13,9 @@ class_name ResultsScreen
 func _ready() -> void:
 	visible = false
 	GameState.phase_changed.connect(_on_phase)
+	$Panel/Margin/VBox/Buttons/PlayAgain.pressed.connect(_on_play_again)
+	$Panel/Margin/VBox/Buttons/MainMenu.pressed.connect(_on_main_menu)
+	$Panel/Margin/VBox/Buttons/Quit.pressed.connect(func (): get_tree().quit())
 
 
 func _on_phase(phase: int) -> void:
@@ -20,9 +23,22 @@ func _on_phase(phase: int) -> void:
 		_show_results()
 
 
+func _on_play_again() -> void:
+	# Host restarts a fresh round; everyone returns via the synced phase change.
+	var game := get_tree().current_scene
+	if NetSession.is_host and game.has_method("restart_match"):
+		game.restart_match()
+
+func _on_main_menu() -> void:
+	NetSession.leave()
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+
+
 func _show_results() -> void:
 	visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Only the host can start another round.
+	$Panel/Margin/VBox/Buttons/PlayAgain.visible = NetSession.is_host
 	for c in _list.get_children():
 		c.queue_free()
 

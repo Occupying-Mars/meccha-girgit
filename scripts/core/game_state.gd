@@ -26,6 +26,14 @@ var _time_left: float = 0.0
 var _running: bool = false
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	# F11 toggles fullscreen anywhere in the game.
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
+		var fs := DisplayServer.WINDOW_MODE_FULLSCREEN
+		var win := DisplayServer.WINDOW_MODE_WINDOWED
+		DisplayServer.window_set_mode(win if DisplayServer.window_get_mode() == fs else fs)
+
+
 func _process(delta: float) -> void:
 	if not _running:
 		return

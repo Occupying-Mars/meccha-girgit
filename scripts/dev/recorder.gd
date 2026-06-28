@@ -46,6 +46,10 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("[recorder] run=", run_name, " out=", _out_dir, " frames=", frames, " interval=", interval)
 
+	# Force a fixed windowed size for consistent captures (the game ships
+	# fullscreen, but the recorder needs a positionable, known-size window).
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_size(Vector2i(1280, 720))
 	if screen_index >= 0:
 		_move_to_screen(screen_index)
 

@@ -106,6 +106,9 @@ func _ready() -> void:
 			add_child(_seeker_hud)
 		else:
 			_setup_menus()
+		var controls := ControlsHud.new()
+		add_child(controls)
+		controls.show_for(is_seeker())
 	elif debug_remote:
 		# Remote players are driven by the synchronizer. Log their synced
 		# position periodically so headless tests can verify replication.

@@ -5,6 +5,8 @@ const ROOT := "Center/Card/Margin/VBox"
 
 @onready var _username: LineEdit = get_node(ROOT + "/UsernameRow/Username")
 @onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
+@onready var _hide_spin: SpinBox = get_node(ROOT + "/TimerRow/Hide")
+@onready var _seek_spin: SpinBox = get_node(ROOT + "/TimerRow/Seek")
 @onready var _online: CheckBox = get_node(ROOT + "/OnlineCheck")
 @onready var _relay_row: HBoxContainer = get_node(ROOT + "/RelayRow")
 @onready var _relay: LineEdit = get_node(ROOT + "/RelayRow/Relay")
@@ -40,6 +42,8 @@ func _set_error(text: String) -> void:
 
 func _on_host() -> void:
 	NetSession.relay_address = _relay.text if _online.button_pressed else ""
+	NetSession.prep_seconds = _hide_spin.value
+	NetSession.seek_seconds = _seek_spin.value
 	_set_busy("Connecting to relay…" if _online.button_pressed else "Hosting…")
 	var err: int = await NetSession.host_game(_username.text, _mode.get_selected_id(), _online.button_pressed)
 	if err != OK:

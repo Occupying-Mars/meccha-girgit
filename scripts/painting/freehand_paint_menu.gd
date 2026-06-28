@@ -59,7 +59,7 @@ func open() -> void:
 	_pitch_a = _pitch.rotation.x
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not visible:
 		return
 	# Drive the brush reticle: hide it over the panel, show its size + color.
@@ -67,6 +67,18 @@ func _process(_delta: float) -> void:
 	_reticle.visible = not over
 	_reticle.radius = brush * RETICLE_SCALE
 	_reticle.paint_color = color
+
+	# Trackpad-friendly orbit with arrow keys (no right-click-drag needed).
+	var oy := 0.0
+	var op := 0.0
+	if Input.is_physical_key_pressed(KEY_LEFT): oy += 1.0
+	if Input.is_physical_key_pressed(KEY_RIGHT): oy -= 1.0
+	if Input.is_physical_key_pressed(KEY_UP): op -= 1.0
+	if Input.is_physical_key_pressed(KEY_DOWN): op += 1.0
+	if oy != 0.0 or op != 0.0:
+		_yaw.rotate_y(oy * 1.8 * delta)
+		_pitch_a = clampf(_pitch_a + op * 1.8 * delta, -1.3, 1.3)
+		_pitch.rotation.x = _pitch_a
 
 
 func close() -> void:

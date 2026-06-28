@@ -27,6 +27,9 @@ var username: String = "Player"
 var mode: int = Mode.RANDOM
 var decided_seeker_id: int = 1
 var seeker_id: int = 1
+## Host-set round durations (seconds).
+var prep_seconds: float = 45.0
+var seek_seconds: float = 120.0
 ## id -> username
 var players: Dictionary = {}
 
@@ -291,6 +294,20 @@ func _reset() -> void:
 	is_host = false
 	players.clear()
 	multiplayer.multiplayer_peer = null
+
+
+## Leave the current match and tear down networking (used by the results menu).
+func leave() -> void:
+	if Noray.is_connected_to_host():
+		Noray.disconnect_from_host()
+	multiplayer.multiplayer_peer = null
+	active = false
+	is_host = false
+	online = false
+	online_oid = ""
+	host_oid = ""
+	players.clear()
+	GameState.authoritative = true
 
 
 func _clean_name(n: String) -> String:
