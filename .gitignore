@@ -1,0 +1,31 @@
+# Godot 4+ specific
+.godot/
+.import/
+
+# Build outputs
+builds/
+exports/
+*.dmg
+*.exe
+*.pck
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Blender backups
+*.blend1
+*.blend2
+
+# Logs
+*.log
+
+tools/mocap/__pycache__/
+
+# Recorder output (lives in /tmp, never committed)

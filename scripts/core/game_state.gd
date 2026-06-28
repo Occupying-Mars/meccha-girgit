@@ -1,0 +1,67 @@
+extends Node
+## Global match state for the hide-and-seek round loop.
+##
+## Round stages (seeker.md §match structure):
+##   ASSIGN  -> PREP -> SEEK -> RESULTS
+## Phase durations are host-configurable; defaults here are demo-tuned.
+## Singleton autoload — UI and gameplay nodes read `phase` and connect to
+## `phase_changed`. Networking will later drive this on the host and
+## replicate; for now it runs locally so we can test single-player.
+
+signal phase_changed(new_phase: int)
+signal phase_tick(seconds_left: float)
+
+enum Phase { ASSIGN, PREP, SEEK, RESULTS }
+enum Mode { NORMAL, INFECTION, DOUBLE }
+
+@export var prep_seconds: float = 45.0
+@export var seek_seconds: float = 120.0
+
+var mode: int = Mode.NORMAL
+var phase: int = Phase.ASSIGN
+var _time_left: float = 0.0
+var _running: bool = false
+
+
+func _process(delta: float) -> void:
+	if not _running:
+		return
+	_time_left -= delta
+	phase_tick.emit(maxf(_time_left, 0.0))
+	if _time_left <= 0.0:
+		_advance_phase()
+
+
+func start_match() -> void:
+	set_phase(Phase.PREP)
+
+
+func set_phase(new_phase: int) -> void:
+	phase = new_phase
+	match phase:
+		Phase.PREP:
+			_time_left = prep_seconds
+			_running = true
+		Phase.SEEK:
+			_time_left = seek_seconds
+			_running = true
+		_:
+			_running = false
+	phase_changed.emit(phase)
+	print("[game_state] phase -> ", Phase.keys()[phase])
+
+
+func _advance_phase() -> void:
+	match phase:
+		Phase.PREP:
+			set_phase(Phase.SEEK)
+		Phase.SEEK:
+			set_phase(Phase.RESULTS)
+
+
+func time_left() -> float:
+	return maxf(_time_left, 0.0)
+
+
+func phase_name() -> String:
+	return Phase.keys()[phase]

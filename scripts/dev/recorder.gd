@@ -1,0 +1,171 @@
+extends Node
+## Headless-friendly screen recorder for autonomous game inspection.
+##
+## Ported from ../thegame. Activates only when `--record=<run_name>` is in the
+## CLI user-args. Captures `frames` viewport snapshots at `interval` seconds
+## apart and quits. Output: /tmp/meccha_runs/<run_name>/frame_NNNN.png so a
+## separate process (Claude) can inspect them without driving the game.
+##
+## Usage:
+##   godot --path . -- --record=arena_check --frames=4 --warmup=0.5 --screen=1
+##
+## Flags (all optional except --record):
+##   --record=NAME       run name (creates that subdirectory)
+##   --frames=N          number of frames to capture (default 4)
+##   --interval=SEC      seconds between captures (default 0.5)
+##   --warmup=SEC        wait before first capture so scene initializes (default 0.5)
+##   --screen=N          display server screen index to spawn the window on
+##   --print-screens     list connected screens at startup (for discovery)
+##   --no-quit           don't quit after captures (lets the user keep playing)
+##   --test=NAME         drive a scripted input sequence in parallel with capture
+
+const OUT_ROOT := "/tmp/meccha_runs"
+
+var run_name: String = ""
+var frames: int = 4
+var interval: float = 0.5
+var warmup: float = 0.5
+var quit_after: bool = true
+var screen_index: int = -1
+var print_screens: bool = false
+var test_name: String = ""
+
+var _out_dir: String = ""
+
+
+func _ready() -> void:
+	_parse_args()
+	if print_screens:
+		_dump_screens()
+	if run_name.is_empty():
+		return  # recorder is dormant unless invoked
+
+	_out_dir = "%s/%s" % [OUT_ROOT, run_name]
+	DirAccess.make_dir_recursive_absolute(_out_dir)
+	print("[recorder] run=", run_name, " out=", _out_dir, " frames=", frames, " interval=", interval)
+
+	if screen_index >= 0:
+		_move_to_screen(screen_index)
+
+	await get_tree().create_timer(warmup).timeout
+
+	if test_name != "":
+		_run_test_async()
+
+	for i in frames:
+		await RenderingServer.frame_post_draw
+		_capture(i)
+		if i < frames - 1:
+			await get_tree().create_timer(interval).timeout
+	print("[recorder] done. frames in ", _out_dir)
+	if quit_after:
+		get_tree().quit()
+
+
+func _run_test_async() -> void:
+	# Fire-and-forget: input timeline runs in parallel with the capture loop.
+	match test_name:
+		"walk_forward":
+			_play_input([{"action": "move_forward", "press": 0.0, "release": 3.0}])
+		"walk_back":
+			_play_input([{"action": "move_back", "press": 0.0, "release": 3.0}])
+		"walk_diag":
+			_play_input([
+				{"action": "move_forward", "press": 0.0, "release": 3.0},
+				{"action": "move_right", "press": 0.0, "release": 3.0},
+			])
+		"jump":
+			_play_input([{"action": "jump", "press": 0.2, "release": 0.3}])
+		"fire":
+			_play_input([
+				{"action": "fire", "press": 0.3, "release": 0.35},
+				{"action": "fire", "press": 0.8, "release": 0.85},
+				{"action": "fire", "press": 1.3, "release": 1.35},
+			])
+		"look_right":
+			_play_mouse(Vector2(8.0, 0.0), 60)
+		"look_left":
+			_play_mouse(Vector2(-8.0, 0.0), 60)
+		"look_walk":
+			_play_input([{"action": "move_forward", "press": 0.0, "release": 3.0}])
+			_play_mouse(Vector2(6.0, 0.0), 80)
+		_:
+			push_warning("[recorder] unknown test name: " + test_name)
+
+
+func _play_input(events: Array) -> void:
+	for ev_raw in events:
+		var ev: Dictionary = ev_raw
+		_schedule_action(ev["action"], ev["press"], true)
+		_schedule_action(ev["action"], ev["release"], false)
+
+
+func _schedule_action(action: String, when: float, press: bool) -> void:
+	# Synthesize an InputEventAction routed through parse_input_event so
+	# is_action_just_pressed() fires correctly the frame the press hits.
+	get_tree().create_timer(when).timeout.connect(func ():
+		var ev := InputEventAction.new()
+		ev.action = action
+		ev.pressed = press
+		Input.parse_input_event(ev)
+		print("[recorder] %s %s" % ["press" if press else "release", action])
+	)
+
+
+func _play_mouse(relative_per_tick: Vector2, ticks: int) -> void:
+	for i in ticks:
+		get_tree().create_timer(i * 0.02).timeout.connect(func ():
+			var ev := InputEventMouseMotion.new()
+			ev.relative = relative_per_tick
+			Input.parse_input_event(ev)
+		)
+
+
+func _parse_args() -> void:
+	for raw in OS.get_cmdline_user_args():
+		var arg := String(raw)
+		if arg.begins_with("--record="):
+			run_name = arg.substr("--record=".length())
+		elif arg.begins_with("--frames="):
+			frames = int(arg.substr("--frames=".length()))
+		elif arg.begins_with("--interval="):
+			interval = float(arg.substr("--interval=".length()))
+		elif arg.begins_with("--warmup="):
+			warmup = float(arg.substr("--warmup=".length()))
+		elif arg.begins_with("--screen="):
+			screen_index = int(arg.substr("--screen=".length()))
+		elif arg == "--no-quit":
+			quit_after = false
+		elif arg == "--print-screens":
+			print_screens = true
+		elif arg.begins_with("--test="):
+			test_name = arg.substr("--test=".length())
+
+
+func _dump_screens() -> void:
+	var n := DisplayServer.get_screen_count()
+	print("[recorder] screens=", n, " primary=", DisplayServer.get_primary_screen())
+	for i in n:
+		print("  screen[", i, "] pos=", DisplayServer.screen_get_position(i),
+				" size=", DisplayServer.screen_get_size(i),
+				" dpi=", DisplayServer.screen_get_dpi(i))
+
+
+func _move_to_screen(idx: int) -> void:
+	if idx < 0 or idx >= DisplayServer.get_screen_count():
+		push_warning("[recorder] requested screen %d not available" % idx)
+		return
+	var screen_pos := DisplayServer.screen_get_position(idx)
+	var screen_size := DisplayServer.screen_get_size(idx)
+	var win_size := DisplayServer.window_get_size()
+	var pos := screen_pos + (screen_size - win_size) / 2
+	DisplayServer.window_set_current_screen(idx)
+	DisplayServer.window_set_position(pos)
+	print("[recorder] moved window to screen ", idx, " at ", pos)
+
+
+func _capture(idx: int) -> void:
+	var img := get_viewport().get_texture().get_image()
+	var path := "%s/frame_%04d.png" % [_out_dir, idx]
+	img.save_png(path)
+	print("[recorder] saved ", path)
