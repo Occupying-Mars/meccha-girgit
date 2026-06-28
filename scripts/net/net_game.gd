@@ -11,6 +11,10 @@ extends Node3D
 const PORT := 24565
 const MAX_PLAYERS := 12
 const PLAYER_SCENE := preload("res://scenes/characters/net_player.tscn")
+## Scoring: hiders earn points while visible to a seeker; closer = faster.
+const VIS_RANGE := 30.0
+const SCORE_RATE := 60.0
+const VIEW_HALF_COS := 0.5  # ~60° half-cone
 
 @onready var _players: Node3D = $Players
 @onready var _spawner: MultiplayerSpawner = $MultiplayerSpawner
@@ -93,9 +97,55 @@ func _on_peer_connected(id: int) -> void:
 		_sync_phase.rpc_id(id, GameState.phase, GameState.time_left())
 
 
+func _process(delta: float) -> void:
+	if multiplayer.is_server() and GameState.phase == GameState.Phase.SEEK:
+		_accumulate_scores(delta)
+
+
+func _accumulate_scores(delta: float) -> void:
+	# Award uncaught hiders for being seen up close (hide-in-plain-sight).
+	var seeker: NetPlayer = _find_seeker()
+	if seeker == null:
+		return
+	var cam := seeker.get_node("CameraYaw/CameraPitch/SpringArm3D/Camera3D") as Camera3D
+	var eye: Vector3 = cam.global_transform.origin
+	var fwd: Vector3 = -cam.global_transform.basis.z
+	var space: PhysicsDirectSpaceState3D = seeker.get_world_3d().direct_space_state
+	for p in _players.get_children():
+		if p.role != NetPlayer.Role.HIDER or p.caught:
+			continue
+		var torso: Vector3 = p.global_transform.origin + Vector3(0, 1.0, 0)
+		var to: Vector3 = torso - eye
+		var dist: float = to.length()
+		if dist > VIS_RANGE or dist < 0.01:
+			continue
+		var dir: Vector3 = to / dist
+		if fwd.dot(dir) < VIEW_HALF_COS:
+			continue  # outside the seeker's view cone
+		var q := PhysicsRayQueryParameters3D.create(eye, torso)
+		q.exclude = [seeker.get_rid()]
+		var hit: Dictionary = space.intersect_ray(q)
+		if hit.is_empty() or hit.get("collider") != p:
+			continue  # occluded — not actually visible
+		p.score += delta * SCORE_RATE * clampf(1.0 - dist / VIS_RANGE, 0.0, 1.0)
+
+
+func _find_seeker() -> NetPlayer:
+	for p in _players.get_children():
+		if p.role == NetPlayer.Role.SEEKER:
+			return p
+	return null
+
+
 func _on_phase_changed(phase: int) -> void:
-	if multiplayer.is_server():
-		_sync_phase.rpc(phase, GameState.time_left())
+	if not multiplayer.is_server():
+		return
+	if phase == GameState.Phase.RESULTS:
+		# Lock in and broadcast final hider scores for the results screen.
+		for p in _players.get_children():
+			if p.role == NetPlayer.Role.HIDER:
+				p.set_score.rpc(p.score)
+	_sync_phase.rpc(phase, GameState.time_left())
 
 
 @rpc("any_peer", "call_remote", "reliable")

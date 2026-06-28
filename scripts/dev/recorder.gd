@@ -114,6 +114,10 @@ func _run_test_async() -> void:
 		"net_caught":
 			# (Run on a client/hider.) Log own caught state.
 			_net_caught()
+		"net_watch":
+			# (Run on the host/seeker.) Keep the seeker aimed at a hider so it
+			# accrues "seen in plain sight" score; never fires.
+			_net_watch()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -192,6 +196,23 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _net_watch() -> void:
+	for i in 200:
+		await get_tree().create_timer(0.05).timeout
+		var players := get_tree().current_scene.get_node_or_null("Players")
+		if players == null:
+			continue
+		var seeker = null
+		var hider = null
+		for p in players.get_children():
+			if p.is_seeker():
+				seeker = p
+			elif p.role == 0 and not p.caught:
+				hider = p
+		if seeker != null and hider != null:
+			seeker._yaw.look_at(hider.global_position + Vector3(0, 1.0, 0), Vector3.UP)
 
 
 func _net_caught() -> void:

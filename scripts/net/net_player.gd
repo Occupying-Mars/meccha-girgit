@@ -42,6 +42,15 @@ var _pose_menu: PoseMenu
 var _menu_open: bool = false
 var _seeker_hud: CanvasLayer
 var caught: bool = false
+## Hider score, accrued by the host while this hider is visible to a seeker
+## and close (hiding in plain sight). Broadcast to all at RESULTS.
+var score: float = 0.0
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func set_score(value: float) -> void:
+	if multiplayer.get_remote_sender_id() == 1:
+		score = value
 
 
 func is_seeker() -> bool:
