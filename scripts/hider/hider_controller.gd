@@ -18,6 +18,7 @@ class_name HiderController
 @onready var _yaw: Node3D = $CameraYaw
 @onready var _pitch: Node3D = $CameraYaw/CameraPitch
 @onready var body: HiderBody = $HiderBody
+@onready var _paint_menu: PaintMenu = $PaintMenu
 
 var input_enabled: bool = true
 var _pitch_angle: float = -0.25
@@ -25,6 +26,32 @@ var _pitch_angle: float = -0.25
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Body builds its parts on its own _ready; ensure it's ready before setup.
+	if body.parts.is_empty():
+		body._build()
+	_paint_menu.setup(body)
+	_paint_menu.closed.connect(_on_menu_closed)
+
+
+func _process(_delta: float) -> void:
+	if Input.is_action_just_pressed("paint_menu"):
+		if _paint_menu.visible:
+			_close_menu()
+		else:
+			_open_menu()
+	elif Input.is_action_just_pressed("ui_cancel") and _paint_menu.visible:
+		_close_menu()
+
+
+func _open_menu() -> void:
+	set_input_enabled(false)
+	_paint_menu.open()
+
+func _close_menu() -> void:
+	_paint_menu.close()  # emits closed -> _on_menu_closed
+
+func _on_menu_closed() -> void:
+	set_input_enabled(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:

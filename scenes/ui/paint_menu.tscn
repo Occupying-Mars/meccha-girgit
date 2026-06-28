@@ -1,0 +1,95 @@
+[gd_scene load_steps=2 format=3 uid="uid://d0paintmenu0"]
+
+[ext_resource type="Script" path="res://scripts/painting/paint_menu.gd" id="1_paint"]
+
+[node name="PaintMenu" type="CanvasLayer"]
+script = ExtResource("1_paint")
+
+[node name="Panel" type="Panel" parent="."]
+anchors_preset = 6
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -340.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "PAINT"
+
+[node name="PartLabel" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "Body part"
+
+[node name="PartScroll" type="ScrollContainer" parent="Panel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+
+[node name="PartList" type="VBoxContainer" parent="Panel/Margin/VBox/PartScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ColorPicker" type="ColorPicker" parent="Panel/Margin/VBox"]
+layout_mode = 2
+edit_alpha = false
+
+[node name="MetallicRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="MetallicLabel" type="Label" parent="Panel/Margin/VBox/MetallicRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Metallic"
+
+[node name="MetallicSlider" type="HSlider" parent="Panel/Margin/VBox/MetallicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+
+[node name="RoughnessRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="RoughnessLabel" type="Label" parent="Panel/Margin/VBox/RoughnessRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Roughness"
+
+[node name="RoughnessSlider" type="HSlider" parent="Panel/Margin/VBox/RoughnessRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+value = 0.6
+
+[node name="EyedropperBtn" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "Eyedropper (sample world)"
+
+[node name="Status" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Pick a part, then paint or sample."
+
+[node name="Hint" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "P / Esc to close"

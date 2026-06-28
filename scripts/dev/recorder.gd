@@ -89,8 +89,37 @@ func _run_test_async() -> void:
 		"look_walk":
 			_play_input([{"action": "move_forward", "press": 0.0, "release": 3.0}])
 			_play_mouse(Vector2(6.0, 0.0), 80)
+		"paint_demo":
+			# Paint each body part a different color (proves per-part
+			# independence), then open the paint menu so the UI is visible.
+			_paint_demo()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
+
+
+func _paint_demo() -> void:
+	# Find the hider body and color parts distinctly, then open the menu.
+	var scene := get_tree().current_scene
+	var hider := scene.find_child("Hider", true, false)
+	if hider == null:
+		push_warning("[recorder] paint_demo: no Hider found")
+		return
+	var body = hider.get("body")
+	if body == null:
+		body = hider.find_child("HiderBody", true, false)
+	var scheme := {
+		"head": Color(0.85, 0.83, 0.80),
+		"torso": Color(0.28, 0.45, 0.68),
+		"arm_l": Color(0.70, 0.30, 0.28),
+		"arm_r": Color(0.40, 0.58, 0.34),
+		"leg_l": Color(0.74, 0.66, 0.32),
+		"leg_r": Color(0.55, 0.50, 0.62),
+	}
+	for part_name in scheme:
+		body.set_part_color(part_name, scheme[part_name])
+	# Open the paint menu via the action so the controller suspends movement.
+	_schedule_action("paint_menu", 0.2, true)
+	_schedule_action("paint_menu", 0.25, false)
 
 
 func _play_input(events: Array) -> void:
