@@ -1,4 +1,5 @@
 extends Node3D
+class_name NetGame
 ## Multiplayer game root (Step A): host/join over ENet (LAN/direct-IP),
 ## host-authoritative. The server spawns one avatar per peer under Players;
 ## a MultiplayerSpawner replicates spawns (incl. to late joiners). Each avatar
@@ -11,6 +12,22 @@ extends Node3D
 const PORT := 24565
 const MAX_PLAYERS := 12
 const PLAYER_SCENE := preload("res://scenes/characters/net_player.tscn")
+## Selectable maps. The host picks one in the menu; it's replicated to everyone
+## at match start (NetSession._begin) so all players build the same arena.
+## `require` (optional) is an asset that must exist, else we fall back to arena.
+const MAPS := {
+	"sponza": {
+		"label": "Sponza",
+		"script": "res://scripts/core/sponza_map.gd",
+		"spawn": Vector3(-4.0, 0.6, -2.0),
+		"require": "res://assets/arenas/sponza/Sponza.gltf",
+	},
+	"arena": {
+		"label": "Test Arena",
+		"script": "res://scripts/core/arena_builder.gd",
+		"spawn": Vector3(-5.0, 0.1, 6.0),
+	},
+}
 ## Scoring: hiders earn points while visible to a seeker; closer = faster.
 const VIS_RANGE := 30.0
 const SCORE_RATE := 60.0
@@ -21,9 +38,11 @@ const VIEW_HALF_COS := 0.5  # ~60° half-cone
 
 @onready var _players: Node3D = $Players
 @onready var _spawner: MultiplayerSpawner = $MultiplayerSpawner
+@onready var _map_root: Node3D = $MapRoot
 
 
 var _started: bool = false
+var _built_map: String = ""
 
 
 func _ready() -> void:
@@ -33,14 +52,41 @@ func _ready() -> void:
 	if NetSession.active:
 		_start_session_mode()
 	else:
+		_build_map.call_deferred("arena")  # CLI/recorder tests run on the procedural arena
 		_start_cli_mode()
+
+
+func _build_map(map_id: String) -> void:
+	# Build the chosen map under MapRoot (each peer does this locally — map
+	# geometry is deterministic and not networked). Falls back to the arena if a
+	# map's assets aren't bundled.
+	_built_map = map_id
+	for c in _map_root.get_children():
+		_map_root.remove_child(c)
+		c.queue_free()
+	var info: Dictionary = MAPS.get(map_id, MAPS["arena"])
+	if info.has("require") and not ResourceLoader.exists(info["require"]):
+		push_warning("[net] map '%s' assets missing — using arena" % map_id)
+		info = MAPS["arena"]
+	var node := Node3D.new()
+	node.name = "Map"
+	node.set_script(load(info["script"]))
+	_map_root.add_child(node)
+	spawn_base = info["spawn"]
+	print("[net] built map: ", map_id)
 
 
 func _start_session_mode() -> void:
 	# Connection was established by the menu/lobby; roles come from NetSession,
 	# assigned when the host starts. Avatars spawn at start (lobby has none).
 	NetSession.started.connect(_on_session_started)
+	NetSession.map_changed.connect(_on_map_changed)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	# Build the map NOW, during the lobby — so the heavy build (Sponza collision)
+	# is done well before players spawn at match start. Clients build their menu
+	# default first, then converge to the host's map when it syncs (_on_map_changed).
+	# Deferred because _ready runs while the tree is still "busy" being built.
+	_build_map.call_deferred(NetSession.selected_map)
 	if multiplayer.is_server():
 		GameState.authoritative = true
 		GameState.phase_changed.connect(_on_phase_changed)
@@ -61,7 +107,18 @@ func _start_cli_mode() -> void:
 			join(a.substr("--client=".length()))
 
 
+func _on_map_changed() -> void:
+	# Host's chosen map arrived on a client — converge to it while still in the
+	# lobby (no players yet, so the rebuild is safe).
+	if NetSession.selected_map != _built_map:
+		_build_map(NetSession.selected_map)
+
+
 func _on_session_started() -> void:
+	# Map was already built during the lobby; only rebuild as a safety net if a
+	# client somehow never received the sync (so we never spawn on the wrong map).
+	if NetSession.selected_map != _built_map:
+		_build_map(NetSession.selected_map)
 	if multiplayer.is_server():
 		_started = true
 		GameState.prep_seconds = NetSession.prep_seconds

@@ -1,7 +1,6 @@
-[gd_scene load_steps=6 format=3 uid="uid://k0netgame0"]
+[gd_scene load_steps=5 format=3 uid="uid://k0netgame0"]
 
 [ext_resource type="Script" path="res://scripts/net/net_game.gd" id="1_netgame"]
-[ext_resource type="Script" path="res://scripts/core/arena_builder.gd" id="2_arena"]
 [ext_resource type="PackedScene" uid="uid://i0roundhud0" path="res://scenes/ui/round_hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" uid="uid://m0results0" path="res://scenes/ui/results_screen.tscn" id="4_results"]
 [ext_resource type="PackedScene" uid="uid://q0lobby0" path="res://scenes/ui/lobby.tscn" id="5_lobby"]
@@ -31,8 +30,7 @@ environment = SubResource("env")
 transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 10, 0)
 shadow_enabled = true
 
-[node name="Arena" type="Node3D" parent="."]
-script = ExtResource("2_arena")
+[node name="MapRoot" type="Node3D" parent="."]
 
 [node name="Players" type="Node3D" parent="."]
 

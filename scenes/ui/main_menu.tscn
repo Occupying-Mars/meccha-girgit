@@ -142,6 +142,19 @@ text = "Mode"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="MapRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/MapRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Map"
+
+[node name="Map" type="OptionButton" parent="Center/Card/Margin/VBox/MapRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
 [node name="TimerRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 8

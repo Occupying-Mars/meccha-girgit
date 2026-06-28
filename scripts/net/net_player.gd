@@ -237,7 +237,10 @@ func _on_menu_closed() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _is_mine or _menu_open or _pause_open:
+	# Only mouse-look while actually playing (mouse captured). This skips menus,
+	# pause, and the results screen — where the cursor is visible for clicking,
+	# so the camera no longer spins while you try to click a results button.
+	if not _is_mine or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
 	if event is InputEventMouseMotion:
 		_yaw.rotate_y(-event.relative.x * mouse_sensitivity)

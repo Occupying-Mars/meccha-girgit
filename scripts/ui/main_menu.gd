@@ -7,6 +7,7 @@ const ROOT := "Center/Card/Margin/VBox"
 @onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
 @onready var _hide_spin: SpinBox = get_node(ROOT + "/TimerRow/Hide")
 @onready var _seek_spin: SpinBox = get_node(ROOT + "/TimerRow/Seek")
+@onready var _map: OptionButton = get_node(ROOT + "/MapRow/Map")
 @onready var _online: CheckBox = get_node(ROOT + "/OnlineCheck")
 @onready var _relay_row: HBoxContainer = get_node(ROOT + "/RelayRow")
 @onready var _relay: LineEdit = get_node(ROOT + "/RelayRow/Relay")
@@ -21,6 +22,11 @@ func _ready() -> void:
 	_mode.clear()
 	_mode.add_item("Random seeker", NetSession.Mode.RANDOM)
 	_mode.add_item("Decided seeker", NetSession.Mode.DECIDED)
+	_map.clear()
+	for id in NetGame.MAPS:
+		_map.add_item(NetGame.MAPS[id]["label"])
+		_map.set_item_metadata(_map.item_count - 1, id)
+	_map.select(0)  # default = first map (Sponza)
 	_host_btn.pressed.connect(_on_host)
 	_join_btn.pressed.connect(_on_join)
 	_online.toggled.connect(func (on): _relay_row.visible = on)
@@ -44,6 +50,7 @@ func _on_host() -> void:
 	NetSession.relay_address = _relay.text if _online.button_pressed else ""
 	NetSession.prep_seconds = _hide_spin.value
 	NetSession.seek_seconds = _seek_spin.value
+	NetSession.selected_map = _map.get_item_metadata(_map.selected)
 	_set_busy("Connecting to relay…" if _online.button_pressed else "Hosting…")
 	var err: int = await NetSession.host_game(_username.text, _mode.get_selected_id(), _online.button_pressed)
 	if err != OK:

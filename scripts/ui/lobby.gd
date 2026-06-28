@@ -37,7 +37,10 @@ func _ready() -> void:
 func _on_phase(p: int) -> void:
 	if p != GameState.Phase.ASSIGN:
 		visible = false
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		# Capture the mouse for gameplay (PREP/SEEK) only. On RESULTS the results
+		# screen needs the cursor visible to click buttons — don't grab it back.
+		if p == GameState.Phase.PREP or p == GameState.Phase.SEEK:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _refresh() -> void:

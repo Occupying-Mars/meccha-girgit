@@ -11,13 +11,17 @@ extends Node
 
 signal players_changed
 signal started
+## Emitted on clients when the host's chosen map arrives, so the game scene can
+## build it during the lobby (before anyone spawns).
+signal map_changed
 
 enum Mode { RANDOM, DECIDED }
 
 const PORT := 24565
 const MAX_PLAYERS := 12
-const GAME_SCENE := "res://scenes/game/net_game_sponza.tscn"
-## Public Noray test relay (no accounts). Self-host for shipping.
+const GAME_SCENE := "res://scenes/game/net_game.tscn"
+## Default Noray relay. The public test relay is unreliable — self-host one and
+## override it with the in-game Relay field (see docs/HOSTING_VPS.md).
 const NORAY_HOST := "tomfol.io"
 const NORAY_PORT := 8890
 
@@ -27,6 +31,9 @@ var username: String = "Player"
 var mode: int = Mode.RANDOM
 var decided_seeker_id: int = 1
 var seeker_id: int = 1
+## Map the host picked; replicated to everyone at match start so all players
+## load the SAME arena. Keys must match NetGame.MAPS ("sponza" / "arena").
+var selected_map: String = "sponza"
 ## Host-set round durations (seconds).
 var prep_seconds: float = 45.0
 var seek_seconds: float = 120.0
@@ -40,6 +47,15 @@ var host_oid: String = ""     # (client) the host's oid we're joining
 ## Relay server to use (host:port). Empty -> --noray CLI / default const.
 ## The public test relay is unreliable; point this at your own noray.
 var relay_address: String = ""
+## How long a client waits for the connection (NAT punch, then relay) to fully
+## establish before giving up. We block on this so the menu never drops a player
+## into the lobby while still disconnected ("stuck on Waiting for host").
+const CONNECT_TIMEOUT := 20.0
+var _client_connected: bool = false
+var _relay_tried: bool = false
+## Set when noray sends a PID for THIS registration. Noray keeps the previous
+## session's PID, so we must wait for a fresh one or re-hosting fails.
+var _fresh_pid: bool = false
 
 
 ## --- Connection -------------------------------------------------------------
@@ -59,7 +75,7 @@ func host_game(uname: String, game_mode: int, want_online: bool = false) -> int:
 	multiplayer.multiplayer_peer = peer
 	active = true
 	players = {1: username}
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	_connect_once(multiplayer.peer_disconnected, _on_peer_disconnected)
 	players_changed.emit()
 	return OK
 
@@ -79,8 +95,8 @@ func join_game(uname: String, code: String, want_online: bool = false) -> int:
 		return err
 	multiplayer.multiplayer_peer = peer
 	active = true
-	multiplayer.connected_to_server.connect(_on_connected_to_server)
-	multiplayer.server_disconnected.connect(_reset)
+	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
+	_connect_once(multiplayer.server_disconnected, _reset)
 	return OK
 
 
@@ -105,21 +121,30 @@ func _split_endpoint(s: String) -> Dictionary:
 func _noray_register() -> int:
 	# Connect to the relay, get our ids, and register our remote address.
 	var ep := _noray_endpoint()
+	if not Noray.on_pid.is_connected(_on_noray_pid):
+		Noray.on_pid.connect(_on_noray_pid)
 	var err: int = await Noray.connect_to_host(ep["host"], ep["port"])
 	if err != OK:
 		return err
+	# Wait for a PID issued by THIS register-host. Noray keeps the PID from a
+	# previous session, so checking `Noray.pid != ""` would pass instantly with
+	# the stale id and register_remote() would fail ("Failed to register local
+	# port") — which is why hosting a SECOND game broke. Wait for a fresh one.
+	_fresh_pid = false
 	Noray.register_host()
-	# Poll for the PID rather than awaiting on_pid — noray can emit it during
-	# the connect step (before we'd await the signal), so the signal is missed.
 	var waited := 0.0
-	while Noray.pid == "" and waited < 10.0:
+	while not _fresh_pid and waited < 10.0:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
-	if Noray.pid == "":
-		push_error("[net] noray: no PID — relay handshake failed/timed out")
+	if not _fresh_pid:
+		push_error("[net] noray: no fresh PID — relay handshake failed/timed out")
 		return ERR_TIMEOUT
 	err = await Noray.register_remote()
 	return err
+
+
+func _on_noray_pid(_pid: String) -> void:
+	_fresh_pid = true
 
 
 func _host_online() -> int:
@@ -142,7 +167,7 @@ func _host_online() -> int:
 	multiplayer.server_relay = true
 	active = true
 	players = {1: username}
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	_connect_once(multiplayer.peer_disconnected, _on_peer_disconnected)
 	players_changed.emit()
 	return OK
 
@@ -156,30 +181,55 @@ func _host_handshake(address: String, port: int) -> void:
 
 func _join_online(oid: String) -> int:
 	host_oid = oid
+	_client_connected = false
+	_relay_tried = false
 	var err := await _noray_register()
 	if err != OK:
 		return err
-	active = true
 	if not Noray.on_connect_nat.is_connected(_client_connect_nat):
 		Noray.on_connect_nat.connect(_client_connect_nat)
 		Noray.on_connect_relay.connect(_client_connect_relay)
-	multiplayer.connected_to_server.connect(_on_connected_to_server)
-	multiplayer.server_disconnected.connect(_reset)
-	Noray.connect_nat(oid)  # connection completes async via the handlers
+	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
+	_connect_once(multiplayer.server_disconnected, _reset)
+	Noray.connect_nat(oid)  # NAT punch first; the handlers fall back to relay
+	# Block until we are ACTUALLY connected (via NAT or relay) or time out, so we
+	# never hand control back to the menu — and load the lobby — while still
+	# disconnected. That stale state is what left joiners on "Waiting for host".
+	var waited := 0.0
+	while not _client_connected and waited < CONNECT_TIMEOUT:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	if not _client_connected:
+		_reset()
+		return ERR_TIMEOUT
+	active = true
 	return OK
 
 
 func _client_connect_nat(address: String, port: int) -> void:
+	if _client_connected:
+		return
 	var err := await _client_connect(address, port)
-	if err != OK:  # NAT punch failed — fall back to the relay
+	if err != OK and not _client_connected and not _relay_tried:
+		# NAT punch failed (common across different home networks) — fall back
+		# to relaying through noray, which always works if the ports are open.
+		_relay_tried = true
 		Noray.connect_relay(host_oid)
 
 
 func _client_connect_relay(address: String, port: int) -> void:
+	if _client_connected:
+		return
 	await _client_connect(address, port)
 
 
 func _client_connect(address: String, port: int) -> int:
+	# Free any prior failed attempt first so its UDP port (our registered
+	# local_port) is released before we bind it again for the relay attempt.
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+		await get_tree().process_frame
 	# Handshake from our registered local port, then ENet-connect through it.
 	var udp := PacketPeerUDP.new()
 	udp.bind(Noray.local_port)
@@ -196,8 +246,11 @@ func _client_connect(address: String, port: int) -> int:
 	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING:
 		await get_tree().process_frame
 	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		peer.close()
 		multiplayer.multiplayer_peer = null
+		await get_tree().process_frame
 		return ERR_CANT_CONNECT
+	_client_connected = true
 	return OK
 
 
@@ -222,6 +275,15 @@ func _register_player(uname: String) -> void:
 		return
 	players[multiplayer.get_remote_sender_id()] = _clean_name(uname)
 	_broadcast_players()
+	# Tell the newcomer which map to build, so it's ready before the match starts.
+	_sync_map.rpc_id(multiplayer.get_remote_sender_id(), selected_map)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _sync_map(map_id: String) -> void:
+	if multiplayer.get_remote_sender_id() == 1:
+		selected_map = map_id
+		map_changed.emit()
 
 
 func _broadcast_players() -> void:
@@ -249,13 +311,14 @@ func start_game() -> void:
 	# genuinely invalid non-zero ids.
 	if sid != 0 and not players.has(sid):
 		sid = int(ids[0])
-	_begin.rpc(sid)
-	_begin(sid)  # host runs it too
+	_begin.rpc(sid, selected_map)
+	_begin(sid, selected_map)  # host runs it too
 
 
 @rpc("authority", "call_remote", "reliable")
-func _begin(sid: int) -> void:
+func _begin(sid: int, map_id: String) -> void:
 	seeker_id = sid
+	selected_map = map_id  # everyone builds the host's chosen map
 	started.emit()
 
 
@@ -315,3 +378,11 @@ func leave() -> void:
 func _clean_name(n: String) -> String:
 	var s := n.strip_edges()
 	return s if s != "" else "Player"
+
+
+## Connect a signal only if not already connected — these handlers persist on
+## the MultiplayerAPI across host/join attempts, so re-hosting would otherwise
+## raise "Signal is already connected" and pile up duplicate callbacks.
+func _connect_once(sig: Signal, cb: Callable) -> void:
+	if not sig.is_connected(cb):
+		sig.connect(cb)
