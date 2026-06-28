@@ -127,6 +127,10 @@ func _run_test_async() -> void:
 		"menu_join":
 			# Join the host via an invite code and report assigned role.
 			_menu_join()
+		"paint_stroke":
+			# (paint_test scene.) Brush a stroke down the blob to verify
+			# freehand surface painting renders.
+			_paint_stroke()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -205,6 +209,17 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _paint_stroke() -> void:
+	var scene := get_tree().current_scene
+	if not scene.has_method("demo_stroke"):
+		push_warning("[recorder] paint_stroke: scene has no demo_stroke()")
+		return
+	for k in 4:
+		scene.demo_stroke()
+		await get_tree().create_timer(0.15).timeout
+	print("[recorder] paint_stroke done")
 
 
 func _menu_host() -> void:
