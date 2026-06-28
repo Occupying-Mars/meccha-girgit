@@ -74,7 +74,7 @@ offset_bottom = 180.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.357, 0.878, 0.541, 1)
 theme_override_font_sizes/font_size = 60
-text = "MECCHA  CHAMELEON"
+text = "MECCHA  GIRGIT"
 horizontal_alignment = 1
 
 [node name="Sub" type="Label" parent="."]

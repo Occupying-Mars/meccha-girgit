@@ -1,7 +1,7 @@
-# meccha-chameleon
+# meccha-girgit
 
 A hide-and-seek **body-painting** game in Godot 4.6, inspired by MECCHA
-CHAMELEON. Hiders are pure-white bipedal blobs who paint themselves and pose
+GIRGIT. Hiders are pure-white bipedal blobs who paint themselves and pose
 to blend into the environment; seekers hunt and shoot them before a timer ends.
 
 This is a standalone project (its own git repo) that **shares the dev tooling**

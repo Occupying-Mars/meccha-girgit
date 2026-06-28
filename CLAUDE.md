@@ -1,4 +1,4 @@
-# rules (meccha-chameleon)
+# rules (meccha-girgit)
 
 This is a **separate project** from the parent `thegame`. It has its own git
 repo. Do not mix commits between the two.
@@ -15,7 +15,7 @@ repo. Do not mix commits between the two.
 
 ## what this game is
 
-Hide-and-seek body painting (MECCHA CHAMELEON clone). Full spec: `../seeker.md`.
+Hide-and-seek body painting (MECCHA GIRGIT clone). Full spec: `../seeker.md`.
 Build order: arena → hider movement → painting → poses → seeker+gun → round
 loop → multiplayer (user-directed, last).
 
