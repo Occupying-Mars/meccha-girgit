@@ -28,7 +28,7 @@ const CLIMB_SPEED := 1.8
 ## default; flip on in the scene when debugging replication.
 @export var debug_remote: bool = false
 
-const PAINT_MENU := preload("res://scenes/ui/paint_menu.tscn")
+const PAINT_MENU := preload("res://scenes/ui/freehand_paint_menu.tscn")
 const POSE_MENU := preload("res://scenes/ui/pose_menu.tscn")
 const SEEKER_HUD := preload("res://scenes/ui/net_seeker_hud.tscn")
 
@@ -48,7 +48,7 @@ enum Role { HIDER, SEEKER }
 
 var _is_mine: bool = false
 var _pitch_angle: float = -0.25
-var _paint_menu: PaintMenu
+var _paint_menu: FreehandPaintMenu
 var _pose_menu: PoseMenu
 var _menu_open: bool = false
 var _seeker_hud: CanvasLayer
@@ -136,7 +136,7 @@ func _debug_remote_loop() -> void:
 func _setup_menus() -> void:
 	_paint_menu = PAINT_MENU.instantiate()
 	add_child(_paint_menu)
-	_paint_menu.setup(body)
+	_paint_menu.setup(body, _camera, _yaw, _pitch)
 	_paint_menu.closed.connect(_on_menu_closed)
 	_paint_menu.closed.connect(_broadcast_paint)  # lock-in: replicate paint
 

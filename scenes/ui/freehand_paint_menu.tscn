@@ -1,0 +1,92 @@
+[gd_scene load_steps=2 format=3 uid="uid://s0freehandpaint0"]
+
+[ext_resource type="Script" path="res://scripts/painting/freehand_paint_menu.gd" id="1_fh"]
+
+[node name="FreehandPaintMenu" type="CanvasLayer"]
+script = ExtResource("1_fh")
+
+[node name="Panel" type="Panel" parent="."]
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "PAINT  —  LMB paint · RMB orbit · wheel size"
+
+[node name="ColorPicker" type="ColorPicker" parent="Panel/Margin/VBox"]
+layout_mode = 2
+edit_alpha = false
+sampler_visible = true
+
+[node name="BrushRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="BrushLabel" type="Label" parent="Panel/Margin/VBox/BrushRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Brush"
+
+[node name="BrushSlider" type="HSlider" parent="Panel/Margin/VBox/BrushRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 2.0
+max_value = 48.0
+value = 12.0
+
+[node name="MetallicRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="MetallicLabel" type="Label" parent="Panel/Margin/VBox/MetallicRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Metallic"
+
+[node name="MetallicSlider" type="HSlider" parent="Panel/Margin/VBox/MetallicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+
+[node name="RoughnessRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+
+[node name="RoughnessLabel" type="Label" parent="Panel/Margin/VBox/RoughnessRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Roughness"
+
+[node name="RoughnessSlider" type="HSlider" parent="Panel/Margin/VBox/RoughnessRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+value = 0.6
+
+[node name="ClearBtn" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "Clear (white)"
+
+[node name="Hint" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Use the dropper in the picker to sample any surface. P / Esc to close."

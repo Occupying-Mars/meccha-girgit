@@ -131,6 +131,10 @@ func _run_test_async() -> void:
 			# (paint_test scene.) Brush a stroke down the blob to verify
 			# freehand surface painting renders.
 			_paint_stroke()
+		"net_paint_fh":
+			# (net hider client.) Freehand-paint a stroke on the real scaled
+			# avatar via raycast from its own camera.
+			_net_paint_fh()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -209,6 +213,34 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _net_paint_fh() -> void:
+	await get_tree().create_timer(0.3).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if not p.is_multiplayer_authority() or p.is_seeker():
+			continue
+		var cam := p.get_node("CameraYaw/CameraPitch/SpringArm3D/Camera3D") as Camera3D
+		var space := cam.get_world_3d().direct_space_state
+		var vp := cam.get_viewport().get_visible_rect().size
+		var hits := 0
+		for i in 24:
+			var t := float(i) / 23.0
+			var sp := Vector2(vp.x * 0.5, vp.y * (0.32 + 0.42 * t))
+			var from := cam.project_ray_origin(sp)
+			var dir := cam.project_ray_normal(sp)
+			var q := PhysicsRayQueryParameters3D.create(from, from + dir * 10.0)
+			q.collision_mask = HiderBody.PAINT_LAYER
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty():
+				var part := (hit["collider"] as Node).get_parent().name
+				p.body.paint_at(String(part), hit["position"], Color(0.9, 0.2, 0.2), 9.0)
+				hits += 1
+		print("[recorder] net_paint_fh: painted %d points on %s" % [hits, p.name])
+		return
 
 
 func _paint_stroke() -> void:
