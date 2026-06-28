@@ -1,0 +1,41 @@
+[gd_scene load_steps=5 format=3 uid="uid://j0netplayer0"]
+
+[ext_resource type="Script" path="res://scripts/net/net_player.gd" id="1_net"]
+[ext_resource type="Script" path="res://scripts/hider/hider_body.gd" id="2_body"]
+
+[sub_resource type="CapsuleShape3D" id="cap"]
+radius = 0.25
+height = 1.7
+
+[sub_resource type="SceneReplicationConfig" id="rep"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath("HiderBody:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+
+[node name="NetPlayer" type="CharacterBody3D"]
+script = ExtResource("1_net")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("cap")
+
+[node name="HiderBody" type="Node3D" parent="."]
+script = ExtResource("2_body")
+
+[node name="CameraYaw" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, 0)
+
+[node name="CameraPitch" type="Node3D" parent="CameraYaw"]
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraYaw/CameraPitch"]
+spring_length = 3.5
+
+[node name="Camera3D" type="Camera3D" parent="CameraYaw/CameraPitch/SpringArm3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3.5)
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+root_path = NodePath("..")
+replication_config = SubResource("rep")

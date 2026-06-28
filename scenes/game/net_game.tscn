@@ -1,0 +1,38 @@
+[gd_scene load_steps=5 format=3 uid="uid://k0netgame0"]
+
+[ext_resource type="Script" path="res://scripts/net/net_game.gd" id="1_netgame"]
+[ext_resource type="Script" path="res://scripts/core/arena_builder.gd" id="2_arena"]
+
+[sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
+sky_horizon_color = Color(0.65, 0.65, 0.7, 1)
+ground_horizon_color = Color(0.65, 0.65, 0.7, 1)
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_mat")
+
+[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_color = Color(0.6, 0.6, 0.65, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 2
+
+[node name="NetGame" type="Node3D"]
+script = ExtResource("1_netgame")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Arena" type="Node3D" parent="."]
+script = ExtResource("2_arena")
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("res://scenes/characters/net_player.tscn")
+spawn_path = NodePath("../Players")

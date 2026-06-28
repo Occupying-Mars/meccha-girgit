@@ -68,6 +68,9 @@ func _run_test_async() -> void:
 	match test_name:
 		"walk_forward":
 			_play_input([{"action": "move_forward", "press": 0.0, "release": 3.0}])
+		"walk_loop":
+			# Long continuous walk (for the moving end of a multiplayer test).
+			_play_input([{"action": "move_forward", "press": 0.0, "release": 30.0}])
 		"walk_back":
 			_play_input([{"action": "move_back", "press": 0.0, "release": 3.0}])
 		"walk_diag":
