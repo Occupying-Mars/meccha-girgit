@@ -32,3 +32,6 @@ tools/mocap/__pycache__/
 
 # Downloaded third-party map (fetch with tools/download_sponza.py)
 assets/arenas/sponza/
+
+# Downloaded CC0 backrooms textures (fetchable; alternate map)
+assets/textures/backrooms/

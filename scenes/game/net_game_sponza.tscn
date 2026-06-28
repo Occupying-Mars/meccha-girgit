@@ -15,9 +15,10 @@ sky_material = SubResource("sky_mat")
 background_mode = 2
 sky = SubResource("sky")
 ambient_light_source = 3
-ambient_light_color = Color(0.7, 0.7, 0.72, 1)
-ambient_light_energy = 0.7
+ambient_light_color = Color(0.88, 0.88, 0.92, 1)
+ambient_light_energy = 1.5
 tonemap_mode = 2
+tonemap_exposure = 1.1
 
 [node name="NetGame" type="Node3D"]
 script = ExtResource("1_netgame")
@@ -28,6 +29,7 @@ environment = SubResource("env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.86, -0.3, 0.4, 0, 0.8, 0.6, -0.5, -0.52, 0.69, 0, 12, 0)
+light_energy = 1.8
 shadow_enabled = true
 
 [node name="Map" type="Node3D" parent="."]

@@ -24,13 +24,20 @@ const PALETTE := [
 	Color(0.66, 0.62, 0.55), Color(0.35, 0.45, 0.32), Color(0.58, 0.30, 0.40),
 ]
 
+const TEX_DIR := "res://assets/textures/backrooms/"
+
 var _w := COLS * ROOM
 var _d := ROWS * ROOM
 var _rng := RandomNumberGenerator.new()
+var _wall_mat: Material
+var _floor_mat: Material
+var _ceil_mat: Material
+var _light_mat: Material
 
 
 func _ready() -> void:
 	_rng.seed = 20260628  # identical layout on every peer
+	_setup_materials()
 	_build_floor_ceiling()
 	_build_perimeter()
 	_build_internal_walls()
@@ -38,21 +45,65 @@ func _ready() -> void:
 	_add_lights()
 
 
+func _setup_materials() -> void:
+	# Real backrooms textures (CC0) if present, else flat-colour fallback.
+	if ResourceLoader.exists(TEX_DIR + "backrooms-wall-diffuse.png"):
+		_wall_mat = _triplanar("backrooms-wall-diffuse.png", "backrooms-wall-normal.png", 0.42)
+		_floor_mat = _triplanar("backrooms-carpet-diffuse.png", "backrooms-carpet-normal.png", 0.22)
+		_ceil_mat = _triplanar("backrooms-ceiling-tile-diffuse.png", "backrooms-ceiling-tile-normal.png", 0.3)
+		_light_mat = _emissive("backrooms-ceiling-light-diffuse.png", "backrooms-ceiling-light-emission.png")
+	else:
+		push_warning("[backrooms] textures missing — run the fetch (flat colours)")
+		_wall_mat = _flat(WALL_COL)
+		_floor_mat = _flat(FLOOR_COL)
+		_ceil_mat = _flat(CEIL_COL)
+
+
+func _triplanar(diffuse: String, normal: String, scale: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(TEX_DIR + diffuse)
+	if ResourceLoader.exists(TEX_DIR + normal):
+		m.normal_enabled = true
+		m.normal_texture = load(TEX_DIR + normal)
+	m.uv1_triplanar = true            # world-space projection -> uniform tiling
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3(scale, scale, scale)
+	m.roughness = 0.92
+	return m
+
+
+func _emissive(diffuse: String, emission: String) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(TEX_DIR + diffuse)
+	m.emission_enabled = true
+	m.emission_texture = load(TEX_DIR + emission)
+	m.emission_energy_multiplier = 2.4
+	m.emission = Color.WHITE
+	return m
+
+
+func _flat(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = 0.9
+	return m
+
+
 func room_center(c: int, r: int) -> Vector3:
 	return Vector3(-_w * 0.5 + (c + 0.5) * ROOM, 0.0, -_d * 0.5 + (r + 0.5) * ROOM)
 
 
 func _build_floor_ceiling() -> void:
-	_box("Floor", Vector3(0, -0.1, 0), Vector3(_w, 0.2, _d), FLOOR_COL)
-	_box("Ceiling", Vector3(0, WALL_H, 0), Vector3(_w, 0.2, _d), CEIL_COL)
+	_box("Floor", Vector3(0, -0.1, 0), Vector3(_w, 0.2, _d), _floor_mat)
+	_box("Ceiling", Vector3(0, WALL_H, 0), Vector3(_w, 0.2, _d), _ceil_mat)
 
 
 func _build_perimeter() -> void:
 	var hh := WALL_H * 0.5
-	_box("Wall", Vector3(0, hh, -_d * 0.5), Vector3(_w + WALL_T, WALL_H, WALL_T), WALL_COL)
-	_box("Wall", Vector3(0, hh, _d * 0.5), Vector3(_w + WALL_T, WALL_H, WALL_T), WALL_COL)
-	_box("Wall", Vector3(-_w * 0.5, hh, 0), Vector3(WALL_T, WALL_H, _d + WALL_T), WALL_COL)
-	_box("Wall", Vector3(_w * 0.5, hh, 0), Vector3(WALL_T, WALL_H, _d + WALL_T), WALL_COL)
+	_box("Wall", Vector3(0, hh, -_d * 0.5), Vector3(_w + WALL_T, WALL_H, WALL_T), _wall_mat)
+	_box("Wall", Vector3(0, hh, _d * 0.5), Vector3(_w + WALL_T, WALL_H, WALL_T), _wall_mat)
+	_box("Wall", Vector3(-_w * 0.5, hh, 0), Vector3(WALL_T, WALL_H, _d + WALL_T), _wall_mat)
+	_box("Wall", Vector3(_w * 0.5, hh, 0), Vector3(WALL_T, WALL_H, _d + WALL_T), _wall_mat)
 
 
 func _build_internal_walls() -> void:
@@ -80,12 +131,12 @@ func _build_internal_walls() -> void:
 func _seg_z(x: float, za: float, zb: float, hh: float) -> void:
 	if zb - za <= 0.05:
 		return
-	_box("Wall", Vector3(x, hh, (za + zb) * 0.5), Vector3(WALL_T, WALL_H, zb - za), WALL_COL)
+	_box("Wall", Vector3(x, hh, (za + zb) * 0.5), Vector3(WALL_T, WALL_H, zb - za), _wall_mat)
 
 func _seg_x(z: float, xa: float, xb: float, hh: float) -> void:
 	if xb - xa <= 0.05:
 		return
-	_box("Wall", Vector3((xa + xb) * 0.5, hh, z), Vector3(xb - xa, WALL_H, WALL_T), WALL_COL)
+	_box("Wall", Vector3((xa + xb) * 0.5, hh, z), Vector3(xb - xa, WALL_H, WALL_T), _wall_mat)
 
 
 func _scatter_furniture() -> void:
@@ -107,22 +158,30 @@ func _furniture(pos: Vector3) -> void:
 		1: size = Vector3(0.5, 2.0, 1.4)              # shelf / locker
 		2: size = Vector3(1.5, 0.6, 0.9)              # table / counter
 		_: size = Vector3(0.8, 1.5, 0.8)              # cabinet / pillar
-	_box("Prop", pos + Vector3(0, size.y * 0.5, 0), size, col)
+	_box("Prop", pos + Vector3(0, size.y * 0.5, 0), size, _flat(col))
 
 
 func _add_lights() -> void:
-	# A few dim ceiling lights for atmosphere; ambient (in the scene env) does
-	# the heavy lifting so the whole level stays readable.
+	# Glowing fluorescent ceiling panels + dim omni fill so the level reads.
 	for c in range(0, COLS, 2):
 		for r in range(0, ROWS, 2):
+			var center := room_center(c, r)
+			if _light_mat != null:
+				var panel := MeshInstance3D.new()
+				var pm := BoxMesh.new()
+				pm.size = Vector3(2.4, 0.06, 1.0)
+				panel.mesh = pm
+				panel.material_override = _light_mat
+				panel.position = center + Vector3(0, WALL_H - 0.12, 0)
+				add_child(panel)
 			var light := OmniLight3D.new()
-			light.position = room_center(c, r) + Vector3(0, WALL_H - 0.4, 0)
-			light.omni_range = ROOM * 1.6
-			light.light_energy = 1.2
+			light.position = center + Vector3(0, WALL_H - 0.4, 0)
+			light.omni_range = ROOM * 1.7
+			light.light_energy = 1.1
 			add_child(light)
 
 
-func _box(node_name: String, pos: Vector3, size: Vector3, color: Color) -> void:
+func _box(node_name: String, pos: Vector3, size: Vector3, mat: Material) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = pos
@@ -130,10 +189,7 @@ func _box(node_name: String, pos: Vector3, size: Vector3, color: Color) -> void:
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	mi.mesh = mesh
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = 0.9
-	mi.material_override = m
+	mi.material_override = mat
 	body.add_child(mi)
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()

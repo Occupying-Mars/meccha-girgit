@@ -16,7 +16,7 @@ enum Mode { RANDOM, DECIDED }
 
 const PORT := 24565
 const MAX_PLAYERS := 12
-const GAME_SCENE := "res://scenes/game/net_game_backrooms.tscn"
+const GAME_SCENE := "res://scenes/game/net_game_sponza.tscn"
 ## Public Noray test relay (no accounts). Self-host for shipping.
 const NORAY_HOST := "tomfol.io"
 const NORAY_PORT := 8890
