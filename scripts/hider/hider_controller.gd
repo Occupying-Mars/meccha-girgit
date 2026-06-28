@@ -19,6 +19,7 @@ class_name HiderController
 @onready var _pitch: Node3D = $CameraYaw/CameraPitch
 @onready var body: HiderBody = $HiderBody
 @onready var _paint_menu: PaintMenu = $PaintMenu
+@onready var _pose_menu: PoseMenu = $PoseMenu
 
 var input_enabled: bool = true
 var _pitch_angle: float = -0.25
@@ -31,27 +32,38 @@ func _ready() -> void:
 		body._build()
 	_paint_menu.setup(body)
 	_paint_menu.closed.connect(_on_menu_closed)
+	_pose_menu.setup(body)
+	_pose_menu.closed.connect(_on_menu_closed)
 
 
 func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("paint_menu"):
+		_toggle_menu(_paint_menu)
+	elif Input.is_action_just_pressed("pose_menu"):
+		_toggle_menu(_pose_menu)
+	elif Input.is_action_just_pressed("ui_cancel"):
 		if _paint_menu.visible:
-			_close_menu()
-		else:
-			_open_menu()
-	elif Input.is_action_just_pressed("ui_cancel") and _paint_menu.visible:
-		_close_menu()
+			_paint_menu.close()
+		elif _pose_menu.visible:
+			_pose_menu.close()
 
 
-func _open_menu() -> void:
+func _toggle_menu(menu) -> void:
+	# Only one menu open at a time.
+	if menu.visible:
+		menu.close()
+		return
+	if _paint_menu.visible:
+		_paint_menu.close()
+	if _pose_menu.visible:
+		_pose_menu.close()
 	set_input_enabled(false)
-	_paint_menu.open()
-
-func _close_menu() -> void:
-	_paint_menu.close()  # emits closed -> _on_menu_closed
+	menu.open()
 
 func _on_menu_closed() -> void:
-	set_input_enabled(true)
+	# Re-enable input only if no menu remains open.
+	if not _paint_menu.visible and not _pose_menu.visible:
+		set_input_enabled(true)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -1,16 +1,15 @@
 extends Node3D
 class_name HiderBody
-## Procedural pure-white bipedal "blob" the hider paints.
+## Procedural pure-white bipedal "blob" the hider paints and poses.
 ##
 ## Built from primitive mesh parts so each body surface can be colored
-## independently. This is the PHASE 1 painting substrate: color-block per
-## part (seeker.md explicitly prioritizes "color-block accuracy over fine
-## detail"). A later phase upgrades to freehand texture painting on the same
-## part layout.
+## independently (PHASE 1 painting: color-block per part — seeker.md
+## prioritizes "color-block accuracy over fine detail").
 ##
-## Each part is a MeshInstance3D with its own StandardMaterial3D, registered
-## in `parts` by name. The painting system calls set_part_color() /
-## set_part_gloss() and reads part_names() to drive its menu.
+## Parts live under `_parts_root` so POSES can tilt/curl the whole figure
+## without disturbing the controller's facing yaw (which it applies to this
+## HiderBody node). Poses break the humanoid silhouette and change which
+## surfaces face outward (seeker.md §pose system).
 
 const BLANK := Color(0.92, 0.92, 0.94)  # near-white starting blob
 
@@ -18,6 +17,11 @@ const BLANK := Color(0.92, 0.92, 0.94)  # near-white starting blob
 var parts: Dictionary = {}
 ## name -> StandardMaterial3D (unique per part so coloring is independent)
 var _materials: Dictionary = {}
+## name -> Transform3D captured at build (the STAND pose)
+var _base_xform: Dictionary = {}
+
+var _parts_root: Node3D
+var current_pose: String = "stand"
 
 
 func _ready() -> void:
@@ -26,8 +30,10 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	# Proportions for a ~1.7 m chunky humanoid. Root at feet (y = 0).
-	# part_name: [mesh, local_position]
+	_parts_root = Node3D.new()
+	_parts_root.name = "PartsRoot"
+	add_child(_parts_root)
+
 	var capsule := func(radius: float, height: float) -> CapsuleMesh:
 		var m := CapsuleMesh.new()
 		m.radius = radius
@@ -46,6 +52,9 @@ func _build() -> void:
 	_add_part("leg_l", capsule.call(0.10, 0.78), Vector3(-0.12, 0.42, 0))
 	_add_part("leg_r", capsule.call(0.10, 0.78), Vector3(0.12, 0.42, 0))
 
+	for n in parts:
+		_base_xform[n] = parts[n].transform
+
 
 func _add_part(part_name: String, mesh: Mesh, pos: Vector3) -> void:
 	var mi := MeshInstance3D.new()
@@ -57,7 +66,7 @@ func _add_part(part_name: String, mesh: Mesh, pos: Vector3) -> void:
 	mat.roughness = 0.6
 	mat.metallic = 0.0
 	mi.material_override = mat
-	add_child(mi)
+	_parts_root.add_child(mi)
 	parts[part_name] = mi
 	_materials[part_name] = mat
 
@@ -86,3 +95,32 @@ func reset_to_blank() -> void:
 		_materials[n].albedo_color = BLANK
 		_materials[n].metallic = 0.0
 		_materials[n].roughness = 0.6
+
+
+## --- Pose API ----------------------------------------------------------------
+## A pose is { "root": Transform3D, "parts": { part_name: Transform3D } }.
+## Parts not listed return to their base (STAND) transform. New poses are
+## added to PoseLibrary.POSES — the system is designed to be extensible.
+
+func apply_pose(pose_name: String, animated: bool = true) -> void:
+	if not PoseLibrary.POSES.has(pose_name):
+		push_warning("[hider_body] unknown pose: " + pose_name)
+		return
+	current_pose = pose_name
+	var pose: Dictionary = PoseLibrary.POSES[pose_name]
+	var root_xform: Transform3D = pose.get("root", Transform3D.IDENTITY)
+	var part_overrides: Dictionary = pose.get("parts", {})
+
+	if animated:
+		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC)
+		tw.tween_property(_parts_root, "transform", root_xform, 0.25)
+		for n in parts:
+			var target: Transform3D = part_overrides.get(n, _base_xform[n])
+			tw.tween_property(parts[n], "transform", target, 0.25)
+	else:
+		_parts_root.transform = root_xform
+		for n in parts:
+			parts[n].transform = part_overrides.get(n, _base_xform[n])
+
+func pose_names() -> Array:
+	return PoseLibrary.POSES.keys()

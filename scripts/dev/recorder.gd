@@ -29,6 +29,7 @@ var quit_after: bool = true
 var screen_index: int = -1
 var print_screens: bool = false
 var test_name: String = ""
+var pose_arg: String = ""
 
 var _out_dir: String = ""
 
@@ -93,6 +94,9 @@ func _run_test_async() -> void:
 			# Paint each body part a different color (proves per-part
 			# independence), then open the paint menu so the UI is visible.
 			_paint_demo()
+		"pose":
+			# Apply the pose named by --pose=NAME and hold it.
+			_apply_pose(pose_arg)
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -120,6 +124,19 @@ func _paint_demo() -> void:
 	# Open the paint menu via the action so the controller suspends movement.
 	_schedule_action("paint_menu", 0.2, true)
 	_schedule_action("paint_menu", 0.25, false)
+
+
+func _apply_pose(pose_name: String) -> void:
+	var scene := get_tree().current_scene
+	var hider := scene.find_child("Hider", true, false)
+	if hider == null:
+		push_warning("[recorder] pose: no Hider found")
+		return
+	var body = hider.get("body")
+	if body == null:
+		body = hider.find_child("HiderBody", true, false)
+	body.apply_pose(pose_name, false)
+	print("[recorder] applied pose: ", pose_name)
 
 
 func _play_input(events: Array) -> void:
@@ -169,6 +186,8 @@ func _parse_args() -> void:
 			print_screens = true
 		elif arg.begins_with("--test="):
 			test_name = arg.substr("--test=".length())
+		elif arg.begins_with("--pose="):
+			pose_arg = arg.substr("--pose=".length())
 
 
 func _dump_screens() -> void:
