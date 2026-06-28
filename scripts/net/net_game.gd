@@ -21,11 +21,20 @@ const MAPS := {
 		"script": "res://scripts/core/sponza_map.gd",
 		"spawn": Vector3(-4.0, 0.6, -2.0),
 		"require": "res://assets/arenas/sponza/Sponza.gltf",
+		# Brightened to match the standalone Sponza scene's tuning.
+		"ambient": 1.5, "sun": 1.8, "exposure": 1.1,
+	},
+	"backrooms": {
+		"label": "Backrooms",
+		"script": "res://scripts/core/backrooms_builder.gd",
+		"spawn": Vector3(-10.5, 0.4, 0.0),
+		"ambient": 0.85, "sun": 0.5, "exposure": 1.0,
 	},
 	"arena": {
 		"label": "Test Arena",
 		"script": "res://scripts/core/arena_builder.gd",
 		"spawn": Vector3(-5.0, 0.1, 6.0),
+		"ambient": 0.6, "sun": 1.0, "exposure": 1.0,
 	},
 }
 ## Scoring: hiders earn points while visible to a seeker; closer = faster.
@@ -39,6 +48,8 @@ const VIEW_HALF_COS := 0.5  # ~60° half-cone
 @onready var _players: Node3D = $Players
 @onready var _spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var _map_root: Node3D = $MapRoot
+@onready var _world_env: WorldEnvironment = $WorldEnvironment
+@onready var _sun: DirectionalLight3D = $Sun
 
 
 var _started: bool = false
@@ -73,7 +84,19 @@ func _build_map(map_id: String) -> void:
 	node.set_script(load(info["script"]))
 	_map_root.add_child(node)
 	spawn_base = info["spawn"]
+	_apply_lighting(info)
 	print("[net] built map: ", map_id)
+
+
+func _apply_lighting(info: Dictionary) -> void:
+	# Per-map lighting so Sponza is bright while the backrooms stays moody.
+	var env: Environment = _world_env.environment
+	if info.has("ambient"):
+		env.ambient_light_energy = info["ambient"]
+	if info.has("exposure"):
+		env.tonemap_exposure = info["exposure"]
+	if info.has("sun"):
+		_sun.light_energy = info["sun"]
 
 
 func _start_session_mode() -> void:
