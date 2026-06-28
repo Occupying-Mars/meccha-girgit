@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3 uid="uid://u0backroomsview0"]
+
+[ext_resource type="Script" path="res://scripts/core/backrooms_view.gd" id="1_view"]
+[ext_resource type="Script" path="res://scripts/core/backrooms_builder.gd" id="2_map"]
+
+[sub_resource type="Environment" id="env"]
+background_mode = 1
+background_color = Color(0.08, 0.08, 0.07, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.6, 0.5, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 2
+
+[node name="BackroomsView" type="Node3D"]
+script = ExtResource("1_view")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Map" type="Node3D" parent="."]
+script = ExtResource("2_map")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 1.7, -13)
