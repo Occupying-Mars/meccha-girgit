@@ -12,7 +12,10 @@ class_name FreehandPaintMenu
 
 signal closed
 
+const RETICLE_SCALE := 1.3  # screen px per texture-pixel of brush radius
+
 @onready var _panel: Panel = $Panel
+@onready var _reticle: BrushReticle = $Reticle
 @onready var _picker: ColorPicker = $Panel/Margin/VBox/ColorPicker
 @onready var _brush_slider: HSlider = $Panel/Margin/VBox/BrushRow/BrushSlider
 @onready var _metallic: HSlider = $Panel/Margin/VBox/MetallicRow/MetallicSlider
@@ -54,6 +57,16 @@ func open() -> void:
 	_painting = false
 	_orbiting = false
 	_pitch_a = _pitch.rotation.x
+
+
+func _process(_delta: float) -> void:
+	if not visible:
+		return
+	# Drive the brush reticle: hide it over the panel, show its size + color.
+	var over := _over_panel(get_viewport().get_mouse_position())
+	_reticle.visible = not over
+	_reticle.radius = brush * RETICLE_SCALE
+	_reticle.paint_color = color
 
 
 func close() -> void:

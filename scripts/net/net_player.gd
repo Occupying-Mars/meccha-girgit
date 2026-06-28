@@ -15,10 +15,12 @@ class_name NetPlayer
 const HIDER_SCALE := 0.34
 const HIDER_SPEED := 2.6
 const SEEKER_SPEED := 5.0
-## Wall-stick (hiders): cling flush to a wall and climb along it.
+## Wall-stick (hiders): flatten FLUSH against a wall to hide as wall-art.
+## Once stuck you only adjust height (raise/lower) to line up with a frame/
+## shelf; you don't free-climb. Release to detach (MECCHA behaviour).
 const STICK_RANGE := 1.0
-const WALL_OFFSET := 0.14
-const CLIMB_SPEED := 1.8
+const WALL_OFFSET := 0.045  # flush: half the flattened body's depth
+const WALL_VSPEED := 1.1    # raise/lower speed while stuck
 
 @export var move_speed: float = 4.0
 @export var mouse_sensitivity: float = 0.0025
@@ -211,7 +213,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _stuck:
-		_climb()
+		_wall_adjust(delta)
 		return
 
 	if not is_on_floor():
@@ -237,7 +239,8 @@ func _physics_process(delta: float) -> void:
 ## --- Wall-stick (hiders cling to and climb walls) ----------------------------
 
 func _try_stick() -> void:
-	# Cast toward where the camera is looking; stick to a vertical surface.
+	# Cast toward where the camera looks; stick FLUSH to a vertical wall.
+	# Mask = world only (layer 1) so we ignore our own paint colliders.
 	var dir := -_yaw.global_transform.basis.z
 	dir.y = 0.0
 	if dir.length() < 0.01:
@@ -246,45 +249,42 @@ func _try_stick() -> void:
 	var from := global_position + Vector3(0, 0.4, 0)
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * STICK_RANGE)
 	q.exclude = [get_rid()]
+	q.collision_mask = 1
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit.is_empty() or absf((hit["normal"] as Vector3).y) > 0.5:
 		return  # nothing to stick to, or it's floor/ceiling not a wall
 	_stuck = true
 	_wall_normal = hit["normal"]
-	# Snap flush and flatten with the broad (painted) side facing the room.
+	# Snap so the flattened body sits flush against the wall (keep height).
 	var p := hit["position"] as Vector3
 	global_position = Vector3(p.x, global_position.y, p.z) + _wall_normal * WALL_OFFSET
-	var face := -_wall_normal
-	body.rotation.y = atan2(face.x, face.z)
+	# Align the body's thin (flattened) axis with the wall normal.
+	body.rotation.y = atan2(_wall_normal.x, _wall_normal.z)
 	velocity = Vector3.ZERO
+	# Pinned, not colliding — disable the movement capsule so it's truly flush.
+	_collision.disabled = true
 	body.apply_pose("wall_flatten", true)
 	_broadcast_pose("wall_flatten")
 
 
-func _climb() -> void:
-	# Move along the wall plane (strafe + climb up/down); stay pinned to it.
-	var in_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var wall_right := _wall_normal.cross(Vector3.UP).normalized()
-	var move := wall_right * in_dir.x + Vector3.UP * (-in_dir.y)
-	velocity = move * CLIMB_SPEED - _wall_normal * 0.6  # bias into wall to stay flush
-	move_and_slide()
-	# Dropped off the edge of the wall — let go.
-	if not _wall_in_reach():
-		_unstick()
-
-
-func _wall_in_reach() -> bool:
-	var from := global_position + Vector3(0, 0.4, 0)
-	var q := PhysicsRayQueryParameters3D.create(from, from - _wall_normal * (WALL_OFFSET + 0.4))
-	q.exclude = [get_rid()]
-	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+func _wall_adjust(delta: float) -> void:
+	# Stuck: only raise/lower to line up with a frame/shelf edge (no climbing).
+	var v := 0.0
+	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
+		v += 1.0
+	if Input.is_action_pressed("move_back"):
+		v -= 1.0
+	velocity = Vector3.ZERO
+	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, 6.0)
 
 
 func _unstick() -> void:
 	if not _stuck:
 		return
 	_stuck = false
-	velocity = _wall_normal * 2.0  # small push off the wall
+	global_position += _wall_normal * 0.12  # step off so the capsule clears
+	_collision.disabled = false
+	velocity = _wall_normal * 1.5
 	body.apply_pose("stand", true)
 	_broadcast_pose("stand")
 	_wall_normal = Vector3.ZERO

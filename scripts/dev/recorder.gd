@@ -294,7 +294,10 @@ func _net_stick() -> void:
 		p._yaw.look_at(Vector3(0, 0.4, 0), Vector3.UP)
 		await get_tree().physics_frame
 		p._try_stick()
-		await get_tree().create_timer(0.5).timeout
+		await get_tree().create_timer(0.4).timeout
+		# Rotate the camera to a side/profile view so the wall gap is visible.
+		var n: Vector3 = p._wall_normal
+		p._yaw.rotation.y = atan2(n.x, n.z) + PI * 0.5
 		print("[recorder] net_stick stuck=%s pose=%s pos=%s"
 			% [p._stuck, p.body.current_pose, str(p.global_position)])
 		return

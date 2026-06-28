@@ -25,43 +25,51 @@ static func _build() -> Dictionary:
 			"root": Transform3D.IDENTITY,
 			"parts": {},
 		},
-		# Lower, compact stance; knees forward, head dropped.
+		# Squat: whole figure drops, thighs fold up under a leaned torso, arms
+		# rest on the knees. Reads as a low compact crouch.
 		"crouch": {
 			"root": Transform3D.IDENTITY,
 			"parts": {
-				"head": _xf(Vector3(0, 1.10, 0.05)),
-				"torso": _xf(Vector3(0, 0.80, 0.02), Vector3.ZERO, Vector3(1, 0.85, 1)),
-				"arm_l": _xf(Vector3(-0.28, 0.78, 0.06), Vector3(25, 0, 0)),
-				"arm_r": _xf(Vector3(0.28, 0.78, 0.06), Vector3(25, 0, 0)),
-				"leg_l": _xf(Vector3(-0.14, 0.30, 0.12), Vector3(40, 0, 0)),
-				"leg_r": _xf(Vector3(0.14, 0.30, 0.12), Vector3(40, 0, 0)),
+				"head": _xf(Vector3(0, 0.92, 0.16), Vector3(18, 0, 0)),
+				"torso": _xf(Vector3(0, 0.66, 0.06), Vector3(20, 0, 0), Vector3(1, 0.8, 1)),
+				"arm_l": _xf(Vector3(-0.26, 0.50, 0.20), Vector3(70, 0, 0), Vector3(1, 0.85, 1)),
+				"arm_r": _xf(Vector3(0.26, 0.50, 0.20), Vector3(70, 0, 0), Vector3(1, 0.85, 1)),
+				"leg_l": _xf(Vector3(-0.14, 0.22, 0.18), Vector3(72, 0, 0), Vector3(1, 0.7, 1)),
+				"leg_r": _xf(Vector3(0.14, 0.22, 0.18), Vector3(72, 0, 0), Vector3(1, 0.7, 1)),
 			},
 		},
-		# Curl into a ball — limbs tuck toward a low center.
+		# Curl into a tight ball: head tucks to knees, limbs wrap around a low
+		# center. A rounded blob, no human outline.
 		"ball": {
 			"root": Transform3D.IDENTITY,
 			"parts": {
-				"head": _xf(Vector3(0, 0.52, 0.22), Vector3(40, 0, 0)),
-				"torso": _xf(Vector3(0, 0.46, 0.02), Vector3(35, 0, 0), Vector3(1, 0.7, 1)),
-				"arm_l": _xf(Vector3(-0.22, 0.42, 0.20), Vector3(85, 0, 0)),
-				"arm_r": _xf(Vector3(0.22, 0.42, 0.20), Vector3(85, 0, 0)),
-				"leg_l": _xf(Vector3(-0.12, 0.40, 0.22), Vector3(105, 0, 0)),
-				"leg_r": _xf(Vector3(0.12, 0.40, 0.22), Vector3(105, 0, 0)),
+				"head": _xf(Vector3(0, 0.34, 0.26), Vector3(70, 0, 0)),
+				"torso": _xf(Vector3(0, 0.36, 0.08), Vector3(70, 0, 0), Vector3(1.1, 0.65, 1.1)),
+				"arm_l": _xf(Vector3(-0.20, 0.30, 0.24), Vector3(105, 0, 0), Vector3(1, 0.8, 1)),
+				"arm_r": _xf(Vector3(0.20, 0.30, 0.24), Vector3(105, 0, 0), Vector3(1, 0.8, 1)),
+				"leg_l": _xf(Vector3(-0.12, 0.28, 0.26), Vector3(135, 0, 0), Vector3(1, 0.7, 1)),
+				"leg_r": _xf(Vector3(0.12, 0.28, 0.26), Vector3(135, 0, 0), Vector3(1, 0.7, 1)),
 			},
 		},
-		# Lie flat on the ground (on the back). Whole figure tips horizontal.
+		# Lie flat on the back: the whole figure tips horizontal and rests low
+		# on the floor, arms tucked to the sides.
 		"lie_flat": {
-			"root": _xf(Vector3(0, 0.18, 0.0), Vector3(-90, 0, 0)),
-			"parts": {},
-		},
-		# Flatten against a wall: thin front-to-back, arms spread wide.
-		"wall_flatten": {
-			"root": _xf(Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.5)),
+			"root": _xf(Vector3(0, 0.14, 0.55), Vector3(-90, 0, 0)),
 			"parts": {
-				"arm_l": _xf(Vector3(-0.40, 1.28, 0), Vector3(0, 0, 45)),
-				"arm_r": _xf(Vector3(0.40, 1.28, 0), Vector3(0, 0, -45)),
-				"leg_l": _xf(Vector3(-0.20, 0.42, 0), Vector3(0, 0, 12)),
-				"leg_r": _xf(Vector3(0.20, 0.42, 0), Vector3(0, 0, -12)),
+				"arm_l": _xf(Vector3(-0.24, 1.10, 0), Vector3.ZERO, Vector3(1, 1, 1)),
+				"arm_r": _xf(Vector3(0.24, 1.10, 0), Vector3.ZERO, Vector3(1, 1, 1)),
+			},
+		},
+		# Flatten against a wall, spread-eagle: thin front-to-back, arms and
+		# legs spread wide so the body becomes a flat painted patch.
+		"wall_flatten": {
+			"root": _xf(Vector3.ZERO, Vector3.ZERO, Vector3(1, 1, 0.4)),
+			"parts": {
+				"head": _xf(Vector3(0, 1.56, 0)),
+				"arm_l": _xf(Vector3(-0.44, 1.30, 0), Vector3(0, 0, 60)),
+				"arm_r": _xf(Vector3(0.44, 1.30, 0), Vector3(0, 0, -60)),
+				"leg_l": _xf(Vector3(-0.26, 0.42, 0), Vector3(0, 0, 18)),
+				"leg_r": _xf(Vector3(0.26, 0.42, 0), Vector3(0, 0, -18)),
 			},
 		},
 	}
