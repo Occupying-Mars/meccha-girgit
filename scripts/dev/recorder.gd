@@ -118,6 +118,9 @@ func _run_test_async() -> void:
 			# (Run on the host/seeker.) Keep the seeker aimed at a hider so it
 			# accrues "seen in plain sight" score; never fires.
 			_net_watch()
+		"net_stick":
+			# (Run on a client/hider.) Move next to the pillar, face it, stick.
+			_net_stick()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -196,6 +199,26 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _net_stick() -> void:
+	await get_tree().create_timer(0.3).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if not p.is_multiplayer_authority() or p.is_seeker():
+			continue
+		# Stand east of the central pillar (x in [-0.5,0.5]) and look at it.
+		p.global_position = Vector3(1.2, 0.1, 0.0)
+		await get_tree().physics_frame
+		p._yaw.look_at(Vector3(0, 0.4, 0), Vector3.UP)
+		await get_tree().physics_frame
+		p._try_stick()
+		await get_tree().create_timer(0.5).timeout
+		print("[recorder] net_stick stuck=%s pose=%s pos=%s"
+			% [p._stuck, p.body.current_pose, str(p.global_position)])
+		return
 
 
 func _net_watch() -> void:

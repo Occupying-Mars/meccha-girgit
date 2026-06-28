@@ -15,6 +15,10 @@ class_name NetPlayer
 const HIDER_SCALE := 0.34
 const HIDER_SPEED := 2.6
 const SEEKER_SPEED := 5.0
+## Wall-stick (hiders): cling flush to a wall and climb along it.
+const STICK_RANGE := 1.0
+const WALL_OFFSET := 0.14
+const CLIMB_SPEED := 1.8
 
 @export var move_speed: float = 4.0
 @export var mouse_sensitivity: float = 0.0025
@@ -49,6 +53,8 @@ var _pose_menu: PoseMenu
 var _menu_open: bool = false
 var _seeker_hud: CanvasLayer
 var caught: bool = false
+var _stuck: bool = false
+var _wall_normal: Vector3 = Vector3.ZERO
 ## Hider score, accrued by the host while this hider is visible to a seeker
 ## and close (hiding in plain sight). Broadcast to all at RESULTS.
 var score: float = 0.0
@@ -148,6 +154,13 @@ func _process(_delta: float) -> void:
 		if Input.is_action_just_pressed("fire") and _can_act():
 			_fire()
 		return
+	# Hider wall-stick toggle (F).
+	if Input.is_action_just_pressed("interact") and not _menu_open and _can_act():
+		if _stuck:
+			_unstick()
+		else:
+			_try_stick()
+		return
 	# Hider menus.
 	if Input.is_action_just_pressed("paint_menu"):
 		_toggle_menu(_paint_menu)
@@ -197,6 +210,10 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
+	if _stuck:
+		_climb()
+		return
+
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	elif Input.is_action_just_pressed("jump"):
@@ -215,6 +232,62 @@ func _physics_process(delta: float) -> void:
 	if move.length() > 0.1:
 		var target_yaw := atan2(move.x, move.z)
 		body.rotation.y = lerp_angle(body.rotation.y, target_yaw, 0.2)
+
+
+## --- Wall-stick (hiders cling to and climb walls) ----------------------------
+
+func _try_stick() -> void:
+	# Cast toward where the camera is looking; stick to a vertical surface.
+	var dir := -_yaw.global_transform.basis.z
+	dir.y = 0.0
+	if dir.length() < 0.01:
+		return
+	dir = dir.normalized()
+	var from := global_position + Vector3(0, 0.4, 0)
+	var q := PhysicsRayQueryParameters3D.create(from, from + dir * STICK_RANGE)
+	q.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty() or absf((hit["normal"] as Vector3).y) > 0.5:
+		return  # nothing to stick to, or it's floor/ceiling not a wall
+	_stuck = true
+	_wall_normal = hit["normal"]
+	# Snap flush and flatten with the broad (painted) side facing the room.
+	var p := hit["position"] as Vector3
+	global_position = Vector3(p.x, global_position.y, p.z) + _wall_normal * WALL_OFFSET
+	var face := -_wall_normal
+	body.rotation.y = atan2(face.x, face.z)
+	velocity = Vector3.ZERO
+	body.apply_pose("wall_flatten", true)
+	_broadcast_pose("wall_flatten")
+
+
+func _climb() -> void:
+	# Move along the wall plane (strafe + climb up/down); stay pinned to it.
+	var in_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var wall_right := _wall_normal.cross(Vector3.UP).normalized()
+	var move := wall_right * in_dir.x + Vector3.UP * (-in_dir.y)
+	velocity = move * CLIMB_SPEED - _wall_normal * 0.6  # bias into wall to stay flush
+	move_and_slide()
+	# Dropped off the edge of the wall — let go.
+	if not _wall_in_reach():
+		_unstick()
+
+
+func _wall_in_reach() -> bool:
+	var from := global_position + Vector3(0, 0.4, 0)
+	var q := PhysicsRayQueryParameters3D.create(from, from - _wall_normal * (WALL_OFFSET + 0.4))
+	q.exclude = [get_rid()]
+	return not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _unstick() -> void:
+	if not _stuck:
+		return
+	_stuck = false
+	velocity = _wall_normal * 2.0  # small push off the wall
+	body.apply_pose("stand", true)
+	_broadcast_pose("stand")
+	_wall_normal = Vector3.ZERO
 
 
 ## --- Paint / pose replication (RPC, reliable, on lock-in) --------------------
