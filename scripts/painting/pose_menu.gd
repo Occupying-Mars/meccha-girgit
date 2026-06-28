@@ -8,6 +8,7 @@ class_name PoseMenu
 ## (returns to stand) per the spec.
 
 signal closed
+signal pose_changed(pose_name: String)
 
 @onready var _list: VBoxContainer = $Panel/Margin/VBox/PoseList
 @onready var _status: Label = $Panel/Margin/VBox/Status
@@ -49,3 +50,4 @@ func _build_buttons() -> void:
 func _on_pose(pose_name: String) -> void:
 	body.apply_pose(pose_name)
 	_status.text = "Current: %s" % pose_name
+	pose_changed.emit(pose_name)

@@ -100,6 +100,14 @@ func _run_test_async() -> void:
 		"pose":
 			# Apply the pose named by --pose=NAME and hold it.
 			_apply_pose(pose_arg)
+		"net_paint":
+			# (Run on the host.) After clients have joined, the local avatar
+			# paints + poses itself and broadcasts — tests paint replication.
+			_net_paint()
+		"net_check":
+			# (Run on a client.) Log remote avatars' torso color + pose to
+			# verify paint/pose replication arrived.
+			_net_check()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -127,6 +135,47 @@ func _paint_demo() -> void:
 	# Open the paint menu via the action so the controller suspends movement.
 	_schedule_action("paint_menu", 0.2, true)
 	_schedule_action("paint_menu", 0.25, false)
+
+
+func _net_paint() -> void:
+	# Wait for a client to join, then paint + pose the local avatar and
+	# broadcast it. Scheme matches the blue crate so the client sees camouflage.
+	await get_tree().create_timer(2.5).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		push_warning("[recorder] net_paint: no Players node")
+		return
+	for p in players.get_children():
+		if not p.is_multiplayer_authority():
+			continue
+		var scheme := {
+			"head": Color(0.85, 0.83, 0.80),
+			"torso": Color(0.28, 0.45, 0.68),
+			"arm_l": Color(0.28, 0.45, 0.68),
+			"arm_r": Color(0.28, 0.45, 0.68),
+			"leg_l": Color(0.28, 0.45, 0.68),
+			"leg_r": Color(0.28, 0.45, 0.68),
+		}
+		for part_name in scheme:
+			p.body.set_part_color(part_name, scheme[part_name])
+		p._broadcast_paint()
+		p.body.apply_pose("crouch", false)
+		p._broadcast_pose("crouch")
+		print("[recorder] net_paint: painted+posed local avatar ", p.name)
+
+
+func _net_check() -> void:
+	await get_tree().create_timer(4.5).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		push_warning("[recorder] net_check: no Players node")
+		return
+	for p in players.get_children():
+		if p.is_multiplayer_authority():
+			continue
+		var c: Color = p.body.get_part_color("torso")
+		print("[recorder] net_check remote %s torso=(%.2f, %.2f, %.2f) pose=%s"
+			% [p.name, c.r, c.g, c.b, p.body.current_pose])
 
 
 func _apply_pose(pose_name: String) -> void:

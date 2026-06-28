@@ -90,6 +90,24 @@ func set_part_gloss(part_name: String, metallic: float, roughness: float) -> voi
 		_materials[part_name].metallic = clampf(metallic, 0.0, 1.0)
 		_materials[part_name].roughness = clampf(roughness, 0.0, 1.0)
 
+func get_part_gloss(part_name: String) -> Vector2:
+	if _materials.has(part_name):
+		return Vector2(_materials[part_name].metallic, _materials[part_name].roughness)
+	return Vector2(0.0, 0.6)
+
+## Full paint state for one body (network/serialization friendly).
+func get_paint_state() -> Dictionary:
+	var state := {}
+	for n in _materials:
+		var g: Vector2 = get_part_gloss(n)
+		state[n] = {"c": _materials[n].albedo_color, "m": g.x, "r": g.y}
+	return state
+
+func apply_paint_state(state: Dictionary) -> void:
+	for n in state:
+		set_part_color(n, state[n]["c"])
+		set_part_gloss(n, state[n]["m"], state[n]["r"])
+
 func reset_to_blank() -> void:
 	for n in _materials:
 		_materials[n].albedo_color = BLANK
