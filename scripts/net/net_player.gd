@@ -10,6 +10,12 @@ class_name NetPlayer
 ## peer id) in _enter_tree so it is identical on every peer. set_multiplayer_
 ## authority is recursive, so the child MultiplayerSynchronizer inherits it.
 
+## Hiders are small (a third of the seeker) and slower; seekers are full-size
+## and faster. Sizes/speeds are applied per role in _configure_role().
+const HIDER_SCALE := 0.34
+const HIDER_SPEED := 2.6
+const SEEKER_SPEED := 5.0
+
 @export var move_speed: float = 4.0
 @export var mouse_sensitivity: float = 0.0025
 @export var gravity: float = 18.0
@@ -33,6 +39,7 @@ enum Role { HIDER, SEEKER }
 @onready var _pitch: Node3D = $CameraYaw/CameraPitch
 @onready var _camera: Camera3D = $CameraYaw/CameraPitch/SpringArm3D/Camera3D
 @onready var _muzzle: RayCast3D = $CameraYaw/CameraPitch/SpringArm3D/Camera3D/Muzzle
+@onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var body: HiderBody = $HiderBody
 
 var _is_mine: bool = false
@@ -92,8 +99,9 @@ func _ready() -> void:
 
 
 func _configure_role() -> void:
-	# Seekers are first-person hunters; hiders are third-person and hide.
+	# Seekers are first-person hunters; hiders are small, slow, third-person.
 	if is_seeker():
+		move_speed = SEEKER_SPEED
 		_spring.spring_length = 0.0
 		_yaw.position.y = 1.6
 		_camera.transform.origin = Vector3.ZERO
@@ -103,6 +111,14 @@ func _configure_role() -> void:
 		_muzzle.add_exception(self)
 	else:
 		add_to_group("hider")
+		move_speed = HIDER_SPEED
+		# Shrink the blob + its collider to a third; bring the camera down so
+		# the small hider still frames well in third person.
+		body.scale = Vector3.ONE * HIDER_SCALE
+		_collision.scale = Vector3.ONE * HIDER_SCALE
+		_collision.position.y = 0.85 * HIDER_SCALE
+		_yaw.position.y = 1.4 * HIDER_SCALE + 0.15
+		_spring.spring_length = 1.4
 
 
 func _debug_remote_loop() -> void:
