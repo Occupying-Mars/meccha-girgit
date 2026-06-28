@@ -121,6 +121,12 @@ func _run_test_async() -> void:
 		"net_stick":
 			# (Run on a client/hider.) Move next to the pillar, face it, stick.
 			_net_stick()
+		"menu_host":
+			# Drive the lobby as host (DECIDED, host=seeker) then start.
+			_menu_host()
+		"menu_join":
+			# Join the host via an invite code and report assigned role.
+			_menu_join()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -199,6 +205,32 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _menu_host() -> void:
+	NetSession.host_game("HostUser", NetSession.Mode.DECIDED)
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(5.0).timeout
+	print("[recorder] lobby roster: ", NetSession.players)
+	NetSession.decided_seeker_id = 1  # host is the chosen seeker
+	NetSession.start_game()
+	await get_tree().create_timer(2.5).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players != null:
+		for p in players.get_children():
+			print("[recorder] host: spawned %s role=%d" % [p.name, p.role])
+
+
+func _menu_join() -> void:
+	await get_tree().create_timer(1.0).timeout  # let the host come up
+	NetSession.join_game("GuestUser", "7F0000015FF5")  # 127.0.0.1:24565
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(8.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players != null:
+		for p in players.get_children():
+			print("[recorder] client: %s role=%d mine=%s"
+				% [p.name, p.role, str(p.is_multiplayer_authority())])
 
 
 func _net_stick() -> void:

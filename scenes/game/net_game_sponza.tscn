@@ -4,6 +4,7 @@
 [ext_resource type="Script" path="res://scripts/core/sponza_map.gd" id="2_map"]
 [ext_resource type="PackedScene" uid="uid://i0roundhud0" path="res://scenes/ui/round_hud.tscn" id="3_hud"]
 [ext_resource type="PackedScene" uid="uid://m0results0" path="res://scenes/ui/results_screen.tscn" id="4_results"]
+[ext_resource type="PackedScene" uid="uid://q0lobby0" path="res://scenes/ui/lobby.tscn" id="5_lobby"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 
@@ -40,3 +41,5 @@ spawn_path = NodePath("../Players")
 [node name="RoundHud" parent="." instance=ExtResource("3_hud")]
 
 [node name="ResultsScreen" parent="." instance=ExtResource("4_results")]
+
+[node name="Lobby" parent="." instance=ExtResource("5_lobby")]

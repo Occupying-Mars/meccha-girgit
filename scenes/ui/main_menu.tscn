@@ -1,0 +1,92 @@
+[gd_scene load_steps=2 format=3 uid="uid://p0mainmenu0"]
+
+[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_menu"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Bg" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.13, 0.14, 0.18, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Center/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "MECCHA CHAMELEON"
+
+[node name="Subtitle" type="Label" parent="Center/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "hide · paint · pose · seek"
+
+[node name="UsernameRow" type="HBoxContainer" parent="Center/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Center/VBox/UsernameRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "Username"
+
+[node name="Username" type="LineEdit" parent="Center/VBox/UsernameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Player"
+placeholder_text = "your name"
+
+[node name="ModeRow" type="HBoxContainer" parent="Center/VBox"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Center/VBox/ModeRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "Mode"
+
+[node name="Mode" type="OptionButton" parent="Center/VBox/ModeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HostBtn" type="Button" parent="Center/VBox"]
+layout_mode = 2
+text = "HOST GAME"
+
+[node name="Sep" type="HSeparator" parent="Center/VBox"]
+layout_mode = 2
+
+[node name="JoinRow" type="HBoxContainer" parent="Center/VBox"]
+layout_mode = 2
+
+[node name="Code" type="LineEdit" parent="Center/VBox/JoinRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "invite code"
+
+[node name="JoinBtn" type="Button" parent="Center/VBox/JoinRow"]
+layout_mode = 2
+text = "JOIN"
+
+[node name="Status" type="Label" parent="Center/VBox"]
+layout_mode = 2
+horizontal_alignment = 1
+modulate = Color(1, 0.6, 0.6, 1)

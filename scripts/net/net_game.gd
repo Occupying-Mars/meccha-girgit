@@ -23,10 +23,34 @@ const VIEW_HALF_COS := 0.5  # ~60° half-cone
 @onready var _spawner: MultiplayerSpawner = $MultiplayerSpawner
 
 
+var _started: bool = false
+
+
 func _ready() -> void:
 	# Custom spawn function runs on every peer with the same data, so initial
 	# position + role are set deterministically (no spawn-vs-sync race).
 	_spawner.spawn_function = _spawn_player
+	if NetSession.active:
+		_start_session_mode()
+	else:
+		_start_cli_mode()
+
+
+func _start_session_mode() -> void:
+	# Connection was established by the menu/lobby; roles come from NetSession,
+	# assigned when the host starts. Avatars spawn at start (lobby has none).
+	NetSession.started.connect(_on_session_started)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	if multiplayer.is_server():
+		GameState.authoritative = true
+		GameState.phase_changed.connect(_on_phase_changed)
+		multiplayer.peer_connected.connect(_on_peer_connected)
+	else:
+		GameState.authoritative = false
+
+
+func _start_cli_mode() -> void:
+	# Headless/test entry: self-host or self-join from CLI args.
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	for arg in OS.get_cmdline_user_args():
@@ -35,6 +59,14 @@ func _ready() -> void:
 			host()
 		elif a.begins_with("--client="):
 			join(a.substr("--client=".length()))
+
+
+func _on_session_started() -> void:
+	if multiplayer.is_server():
+		_started = true
+		for id in NetSession.players.keys():
+			_add_player(int(id))
+		GameState.start_match()
 
 
 func host() -> void:
@@ -93,11 +125,14 @@ func _request_full_state() -> void:
 
 
 func _on_peer_connected(id: int) -> void:
-	if multiplayer.is_server():
-		print("[net] peer connected: ", id)
-		_add_player(id)
-		# Bring the late joiner into the current phase.
-		_sync_phase.rpc_id(id, GameState.phase, GameState.time_left())
+	if not multiplayer.is_server():
+		return
+	if NetSession.active and not _started:
+		return  # still in the lobby; avatars spawn when the host starts
+	print("[net] peer connected: ", id)
+	_add_player(id)
+	# Bring the late joiner into the current phase.
+	_sync_phase.rpc_id(id, GameState.phase, GameState.time_left())
 
 
 func _process(delta: float) -> void:
@@ -165,8 +200,13 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _add_player(id: int) -> void:
-	# Normal mode for now: the host is the lone seeker, everyone else hides.
-	var role := NetPlayer.Role.SEEKER if id == 1 else NetPlayer.Role.HIDER
+	# Roles from the lobby (random/decided) when a session is active; otherwise
+	# the CLI test default: host is the lone seeker.
+	var role: int
+	if NetSession.active:
+		role = NetSession.role_for(id)
+	else:
+		role = NetPlayer.Role.SEEKER if id == 1 else NetPlayer.Role.HIDER
 	var data := {
 		"id": id,
 		"pos": _spawn_pos(_players.get_child_count()),
