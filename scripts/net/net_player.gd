@@ -316,6 +316,10 @@ func _try_stick() -> void:
 	velocity = Vector3.ZERO
 	# Pinned, not colliding — disable the movement capsule so it sits flush.
 	_collision.disabled = true
+	# Flatten against the wall (visibly stuck + thin profile = wall-art camo),
+	# and replicate the pose so the seeker sees it too.
+	body.apply_pose("wall_flatten", false)
+	_broadcast_pose("wall_flatten")
 
 
 func _wall_adjust(delta: float) -> void:
@@ -337,6 +341,9 @@ func _unstick() -> void:
 	_collision.disabled = false
 	velocity = _wall_normal * 1.5
 	_wall_normal = Vector3.ZERO
+	body.rotation.y = 0.0
+	body.apply_pose("stand", false)
+	_broadcast_pose("stand")
 
 
 ## --- Paint / pose replication (RPC, reliable, on lock-in) --------------------

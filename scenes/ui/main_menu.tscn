@@ -155,6 +155,26 @@ text = "Map"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="ServerRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/ServerRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Server"
+
+[node name="ServerIP" type="LineEdit" parent="Center/Card/Margin/VBox/ServerRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = ""
+placeholder_text = "server ip"
+
+[node name="JoinServerBtn" type="Button" parent="Center/Card/Margin/VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "▶  JOIN SERVER"
+
 [node name="TimerRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 8
@@ -184,10 +204,11 @@ value = 120.0
 
 [node name="OnlineCheck" type="CheckBox" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
+button_pressed = true
 text = "Play over internet (relay)"
 
 [node name="RelayRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
-visible = false
+visible = true
 layout_mode = 2
 theme_override_constants/separation = 10
 
@@ -199,6 +220,7 @@ text = "Relay"
 [node name="Relay" type="LineEdit" parent="Center/Card/Margin/VBox/RelayRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+text = ""
 placeholder_text = "your noray host:port"
 
 [node name="HostBtn" type="Button" parent="Center/Card/Margin/VBox"]

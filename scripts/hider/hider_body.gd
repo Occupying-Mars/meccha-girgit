@@ -68,6 +68,9 @@ func _add_part(part_name: String, mesh: Mesh, pos: Vector3) -> void:
 	mi.name = part_name
 	mi.mesh = mesh
 	mi.position = pos
+	# No body shadow — a person-shaped shadow on the floor/wall would give a
+	# painted, posed hider away instantly.
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
 	img.fill(BLANK)

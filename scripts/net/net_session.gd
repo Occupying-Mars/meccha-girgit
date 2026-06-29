@@ -474,6 +474,32 @@ func role_for(id: int) -> int:
 	return 1 if id == seeker_id else 0
 
 
+## Client: connect straight to a dedicated server by IP:port (the most
+## firewall/CGNAT-friendly path — we only ever initiate outbound to a public IP).
+func join_server(uname: String, address: String, port: int = PORT) -> int:
+	username = _clean_name(uname)
+	is_host = false
+	online = false
+	dedicated = false
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_client(address, port)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
+	_connect_once(multiplayer.server_disconnected, _reset)
+	# Block until actually connected, so we don't load the lobby while connecting.
+	var waited := 0.0
+	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING and waited < CONNECT_TIMEOUT:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		_reset()
+		return ERR_CANT_CONNECT
+	active = true
+	return OK
+
+
 ## --- Invite code (encodes host IP:port) -------------------------------------
 
 func local_ip() -> String:

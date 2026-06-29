@@ -30,6 +30,20 @@ const MAPS := {
 		"spawn": Vector3(-10.5, 0.4, 0.0),
 		"ambient": 0.85, "sun": 0.5, "exposure": 1.0,
 	},
+	"warehouse": {
+		"label": "Warehouse",
+		"script": "res://scripts/core/warehouse_builder.gd",
+		"spawn": Vector3(0.0, 0.5, 12.0),
+		"ambient": 0.7, "sun": 1.1, "exposure": 1.0,
+	},
+	"dungeon": {
+		"label": "Dungeon (KayKit)",
+		"script": "res://scripts/core/kaykit_dungeon_builder.gd",
+		"spawn": Vector3(-12.0, 0.6, -12.0),
+		"require": "res://assets/maps/kaykit/floor.glb",
+		"dark_bg": true, "ambient_color": Color(0.40, 0.42, 0.55),
+		"ambient": 0.55, "sun": 0.55, "exposure": 0.85,
+	},
 	"arena": {
 		"label": "Test Arena",
 		"script": "res://scripts/core/arena_builder.gd",
@@ -64,9 +78,27 @@ func _ready() -> void:
 		_start_dedicated_server()
 	elif NetSession.active:
 		_start_session_mode()
+		_add_minimap()
 	else:
-		_build_map.call_deferred("arena")  # CLI/recorder tests run on the procedural arena
+		_build_map.call_deferred(_cli_map())  # CLI: --map=NAME (default arena)
 		_start_cli_mode()
+		_add_minimap()
+
+
+func _add_minimap() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var mm: CanvasLayer = load("res://scripts/ui/minimap.gd").new()
+	mm.setup(_players)
+	add_child(mm)
+
+
+func _cli_map() -> String:
+	for a in OS.get_cmdline_user_args():
+		var s := String(a)
+		if s.begins_with("--map="):
+			return s.substr("--map=".length())
+	return "arena"  # light + always-bundled; safe default for a small VPS
 
 
 func _start_dedicated_server() -> void:
@@ -122,8 +154,18 @@ func _build_map(map_id: String) -> void:
 
 
 func _apply_lighting(info: Dictionary) -> void:
-	# Per-map lighting so Sponza is bright while the backrooms stays moody.
+	# Per-map lighting so Sponza is bright while the dungeon stays dark/moody.
 	var env: Environment = _world_env.environment
+	if info.get("dark_bg", false):
+		# Dark indoor look — no bright sky, ambient from a dim color so hiders
+		# can actually disappear into the gloom.
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.03, 0.03, 0.05)
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = info.get("ambient_color", Color(0.45, 0.45, 0.55))
+	else:
+		env.background_mode = Environment.BG_SKY
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	if info.has("ambient"):
 		env.ambient_light_energy = info["ambient"]
 	if info.has("exposure"):
@@ -158,9 +200,9 @@ func _start_cli_mode() -> void:
 	for arg in OS.get_cmdline_user_args():
 		var a := String(arg)
 		if a == "--server":
-			host()
+			host.call_deferred()  # deferred so the map is built before we spawn
 		elif a.begins_with("--client="):
-			join(a.substr("--client=".length()))
+			join.call_deferred(a.substr("--client=".length()))
 
 
 func _on_map_changed() -> void:
@@ -320,6 +362,8 @@ func _add_player(id: int) -> void:
 	var role: int
 	if NetSession.active:
 		role = NetSession.role_for(id)
+	elif "--ashider" in OS.get_cmdline_user_args():
+		role = NetPlayer.Role.HIDER  # CLI preview: be a hider to test paint/pose
 	else:
 		role = NetPlayer.Role.SEEKER if id == 1 else NetPlayer.Role.HIDER
 	var data := {
