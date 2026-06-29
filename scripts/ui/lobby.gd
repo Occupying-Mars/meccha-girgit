@@ -10,6 +10,7 @@ extends CanvasLayer
 @onready var _seeker_pick: OptionButton = $Panel/Margin/VBox/SeekerPick
 @onready var _start: Button = $Panel/Margin/VBox/StartBtn
 @onready var _waiting: Label = $Panel/Margin/VBox/Waiting
+@onready var _copy_btn: Button = $Panel/Margin/VBox/CopyBtn
 
 
 func _ready() -> void:
@@ -25,13 +26,23 @@ func _ready() -> void:
 	_start.visible = host
 	_waiting.visible = not host
 	_code.text = "Invite code:  %s" % NetSession.invite_code() if host else "Connected — waiting in lobby"
+	_copy_btn.visible = host  # only the host has a code to share
 	_mode.text = "Mode:  %s" % ("Random seeker" if NetSession.mode == NetSession.Mode.RANDOM else "Decided seeker")
 	_seeker_pick.visible = host and NetSession.mode == NetSession.Mode.DECIDED
 
 	if host:
 		_start.pressed.connect(func (): NetSession.start_game())
 		_seeker_pick.item_selected.connect(_on_seeker_pick)
+		_copy_btn.pressed.connect(_on_copy)
 	_refresh()
+
+
+func _on_copy() -> void:
+	DisplayServer.clipboard_set(NetSession.invite_code())
+	_copy_btn.text = "✓ Copied!"
+	await get_tree().create_timer(1.2).timeout
+	if is_instance_valid(_copy_btn):
+		_copy_btn.text = "📋 Copy invite code"
 
 
 func _on_phase(p: int) -> void:

@@ -50,12 +50,44 @@ var relay_address: String = ""
 ## How long a client waits for the connection (NAT punch, then relay) to fully
 ## establish before giving up. We block on this so the menu never drops a player
 ## into the lobby while still disconnected ("stuck on Waiting for host").
-const CONNECT_TIMEOUT := 20.0
+## Generous, because the cross-network path is NAT-punch (fast-fail) + relay
+## handshake + relay ENet connect, which adds up.
+const CONNECT_TIMEOUT := 45.0
 var _client_connected: bool = false
 var _relay_tried: bool = false
 ## Set when noray sends a PID for THIS registration. Noray keeps the previous
 ## session's PID, so we must wait for a fresh one or re-hosting fails.
 var _fresh_pid: bool = false
+
+## --- Connection diagnostics (writes a step-by-step log to the Desktop) -------
+var _net_t0: int = 0
+var _netlog_lines: PackedStringArray = PackedStringArray()
+
+func _netlog_start(role: String) -> void:
+	_net_t0 = Time.get_ticks_msec()
+	var ep := _noray_endpoint()
+	_netlog_lines = PackedStringArray([
+		"=== MECCHA GIRGIT connection log — role: %s ===" % role,
+		"relay: %s:%s" % [ep.get("host"), ep.get("port")],
+		"(send this whole file to whoever is hosting/debugging)",
+		"",
+	])
+	_netlog("log started")
+
+func _netlog(msg: String) -> void:
+	var t := float(Time.get_ticks_msec() - _net_t0) / 1000.0
+	var line := "[+%6.1fs] %s" % [t, msg]
+	_netlog_lines.append(line)
+	print("[netdiag] ", line)
+	# Write to the Desktop (easy to find), falling back to the user data dir.
+	for dir in [OS.get_system_dir(OS.SYSTEM_DIR_DESKTOP), OS.get_user_data_dir()]:
+		if dir == "":
+			continue
+		var f := FileAccess.open(dir.path_join("meccha_netlog.txt"), FileAccess.WRITE)
+		if f != null:
+			f.store_string("\n".join(_netlog_lines))
+			f.close()
+			return
 
 
 ## --- Connection -------------------------------------------------------------
@@ -125,7 +157,9 @@ func _noray_register() -> int:
 		Noray.on_pid.connect(_on_noray_pid)
 	var err: int = await Noray.connect_to_host(ep["host"], ep["port"])
 	if err != OK:
+		_netlog("could NOT reach relay %s:%s (%s)" % [ep["host"], ep["port"], error_string(err)])
 		return err
+	_netlog("reached relay %s:%s" % [ep["host"], ep["port"]])
 	# Wait for a PID issued by THIS register-host. Noray keeps the PID from a
 	# previous session, so checking `Noray.pid != ""` would pass instantly with
 	# the stale id and register_remote() would fail ("Failed to register local
@@ -137,9 +171,11 @@ func _noray_register() -> int:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
 	if not _fresh_pid:
+		_netlog("relay never issued a PID (timed out)")
 		push_error("[net] noray: no fresh PID — relay handshake failed/timed out")
 		return ERR_TIMEOUT
 	err = await Noray.register_remote()
+	_netlog("registered our UDP port with relay: %s (local_port=%s)" % [error_string(err), Noray.local_port])
 	return err
 
 
@@ -148,10 +184,13 @@ func _on_noray_pid(_pid: String) -> void:
 
 
 func _host_online() -> int:
+	_netlog_start("HOST")
 	var err := await _noray_register()
 	if err != OK:
+		_netlog("host registration FAILED: %s" % error_string(err))
 		return err
 	online_oid = Noray.oid  # this is the invite code
+	_netlog("hosting OK, invite code = %s" % online_oid)
 	if not Noray.on_connect_nat.is_connected(_host_handshake):
 		Noray.on_connect_nat.connect(_host_handshake)
 		Noray.on_connect_relay.connect(_host_handshake)
@@ -173,24 +212,31 @@ func _host_online() -> int:
 
 
 func _host_handshake(address: String, port: int) -> void:
-	# A peer wants in — punch a hole so ENet can accept them.
+	# A peer wants in — keep punching toward the relay/peer for a good while, so
+	# the path stays open until the client's ENet connect (which over a relay can
+	# only start ~10s in) actually lands.
+	_netlog("host: got connect request, punching toward %s:%d for 25s" % [address, port])
 	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if peer != null:
-		await PacketHandshake.over_enet_peer(peer, address, port)
+		await PacketHandshake.over_enet_peer(peer, address, port, 25.0)
+		_netlog("host: finished punching toward %s:%d" % [address, port])
 
 
 func _join_online(oid: String) -> int:
+	_netlog_start("JOINER")
 	host_oid = oid
 	_client_connected = false
 	_relay_tried = false
 	var err := await _noray_register()
 	if err != OK:
+		_netlog("joiner registration FAILED: %s" % error_string(err))
 		return err
 	if not Noray.on_connect_nat.is_connected(_client_connect_nat):
 		Noray.on_connect_nat.connect(_client_connect_nat)
 		Noray.on_connect_relay.connect(_client_connect_relay)
 	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
 	_connect_once(multiplayer.server_disconnected, _reset)
+	_netlog("requesting NAT punch to host %s ..." % oid)
 	Noray.connect_nat(oid)  # NAT punch first; the handlers fall back to relay
 	# Block until we are ACTUALLY connected (via NAT or relay) or time out, so we
 	# never hand control back to the menu — and load the lobby — while still
@@ -200,8 +246,11 @@ func _join_online(oid: String) -> int:
 		await get_tree().process_frame
 		waited += get_process_delta_time()
 	if not _client_connected:
+		_netlog("GAVE UP after %.1fs — never connected (tried relay: %s)" % [waited, _relay_tried])
+		_netlog("=> we could SEND to the host/relay but apparently never got replies back.")
 		_reset()
 		return ERR_TIMEOUT
+	_netlog("JOIN SUCCESS after %.1fs" % waited)
 	active = true
 	return OK
 
@@ -209,10 +258,13 @@ func _join_online(oid: String) -> int:
 func _client_connect_nat(address: String, port: int) -> void:
 	if _client_connected:
 		return
-	var err := await _client_connect(address, port)
+	# NAT punch: fail FAST (short handshake + short connect wait) so that, when
+	# home NATs won't cooperate (the common cross-house case), we fall through to
+	# the relay quickly with most of the budget left.
+	_netlog("NAT: host reachable at %s:%d, trying direct punch" % [address, port])
+	var err := await _client_connect(address, port, 2.5, 5.0, "NAT")
 	if err != OK and not _client_connected and not _relay_tried:
-		# NAT punch failed (common across different home networks) — fall back
-		# to relaying through noray, which always works if the ports are open.
+		_netlog("NAT punch failed — falling back to relay")
 		_relay_tried = true
 		Noray.connect_relay(host_oid)
 
@@ -220,10 +272,12 @@ func _client_connect_nat(address: String, port: int) -> void:
 func _client_connect_relay(address: String, port: int) -> void:
 	if _client_connected:
 		return
-	await _client_connect(address, port)
+	# Relay: our reliable cross-network fallback — give it a generous budget.
+	_netlog("RELAY: noray assigned relay at %s:%d" % [address, port])
+	await _client_connect(address, port, 7.0, 22.0, "RELAY")
 
 
-func _client_connect(address: String, port: int) -> int:
+func _client_connect(address: String, port: int, hs_timeout: float = 7.0, enet_timeout: float = 20.0, via: String = "?") -> int:
 	# Free any prior failed attempt first so its UDP port (our registered
 	# local_port) is released before we bind it again for the relay attempt.
 	if multiplayer.multiplayer_peer != null:
@@ -234,24 +288,40 @@ func _client_connect(address: String, port: int) -> int:
 	var udp := PacketPeerUDP.new()
 	udp.bind(Noray.local_port)
 	udp.set_dest_address(address, port)
-	var err := await PacketHandshake.over_packet_peer(udp)
+	var err := await PacketHandshake.over_packet_peer(udp, hs_timeout)
 	udp.close()
+	# The handshake result is the key signal: OK = packets came BACK (two-way);
+	# TIMEOUT = we sent but received NOTHING (our inbound is blocked — firewall/CGNAT).
+	_netlog("%s: UDP handshake = %s" % [via, _hs_name(err)])
 	if err != OK and err != ERR_BUSY:
 		return err
 	var peer := ENetMultiplayerPeer.new()
 	err = peer.create_client(address, port, 0, 0, 0, Noray.local_port)
 	if err != OK:
+		_netlog("%s: create_client error: %s" % [via, error_string(err)])
 		return err
 	multiplayer.multiplayer_peer = peer
-	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING:
+	var enet_waited := 0.0
+	while peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING and enet_waited < enet_timeout:
+		enet_waited += get_process_delta_time()
 		await get_tree().process_frame
 	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		_netlog("%s: ENet did NOT connect after %.1fs (status=%d) — host replies not reaching us" % [via, enet_waited, peer.get_connection_status()])
 		peer.close()
 		multiplayer.multiplayer_peer = null
 		await get_tree().process_frame
 		return ERR_CANT_CONNECT
+	_netlog("%s: ENet CONNECTED in %.1fs ✓" % [via, enet_waited])
 	_client_connected = true
 	return OK
+
+
+func _hs_name(err: int) -> String:
+	match err:
+		OK: return "TWO-WAY OK (replies received)"
+		ERR_BUSY: return "PARTIAL (sent + read, no full ack)"
+		ERR_TIMEOUT: return "TIMEOUT — got NOTHING back (inbound likely blocked: firewall/CGNAT)"
+		_: return error_string(err)
 
 
 ## Invite code: the relay OID online, or the encoded host IP on LAN.
@@ -260,6 +330,7 @@ func invite_code() -> String:
 
 
 func _on_connected_to_server() -> void:
+	_netlog("connected_to_server — telling host our name")
 	_register_player.rpc_id(1, username)
 
 
@@ -274,6 +345,7 @@ func _register_player(uname: String) -> void:
 	if not multiplayer.is_server():
 		return
 	players[multiplayer.get_remote_sender_id()] = _clean_name(uname)
+	_netlog("host: peer %d JOINED as '%s' ✓" % [multiplayer.get_remote_sender_id(), _clean_name(uname)])
 	_broadcast_players()
 	# Tell the newcomer which map to build, so it's ready before the match starts.
 	_sync_map.rpc_id(multiplayer.get_remote_sender_id(), selected_map)

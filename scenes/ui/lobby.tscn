@@ -50,6 +50,10 @@ text = "LOBBY"
 layout_mode = 2
 text = "Invite code:  --"
 
+[node name="CopyBtn" type="Button" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "📋 Copy invite code"
+
 [node name="ModeLabel" type="Label" parent="Panel/Margin/VBox"]
 layout_mode = 2
 text = "Mode:  --"
