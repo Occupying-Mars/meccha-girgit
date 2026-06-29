@@ -60,11 +60,44 @@ func _ready() -> void:
 	# Custom spawn function runs on every peer with the same data, so initial
 	# position + role are set deterministically (no spawn-vs-sync race).
 	_spawner.spawn_function = _spawn_player
-	if NetSession.active:
+	if "--dedicated" in OS.get_cmdline_user_args():
+		_start_dedicated_server()
+	elif NetSession.active:
 		_start_session_mode()
 	else:
 		_build_map.call_deferred("arena")  # CLI/recorder tests run on the procedural arena
 		_start_cli_mode()
+
+
+func _start_dedicated_server() -> void:
+	# VPS entry: a server with no player of its own; clients connect outbound by
+	# the VPS public IP (works through any NAT). Configured via CLI args:
+	#   --dedicated [--map=backrooms] [--mode=random|decided] [--prep=N] [--seek=N]
+	var map_id := "backrooms"  # default needs no downloaded assets
+	var gmode := NetSession.Mode.RANDOM
+	var prep := 45.0
+	var seek := 120.0
+	for raw in OS.get_cmdline_user_args():
+		var a := String(raw)
+		if a.begins_with("--map="):
+			map_id = a.substr("--map=".length())
+		elif a.begins_with("--mode="):
+			gmode = NetSession.Mode.DECIDED if a.substr("--mode=".length()) == "decided" else NetSession.Mode.RANDOM
+		elif a.begins_with("--prep="):
+			prep = float(a.substr("--prep=".length()))
+		elif a.begins_with("--seek="):
+			seek = float(a.substr("--seek=".length()))
+	NetSession.selected_map = map_id
+	NetSession.prep_seconds = prep
+	NetSession.seek_seconds = seek
+	var err := NetSession.host_dedicated(gmode)
+	if err != OK:
+		push_error("[net] dedicated server failed to start: %s" % error_string(err))
+		get_tree().quit(1)
+		return
+	print("[net] DEDICATED server listening on :%d  map=%s mode=%s prep=%.0f seek=%.0f" %
+		[NetSession.PORT, map_id, "decided" if gmode == NetSession.Mode.DECIDED else "random", prep, seek])
+	_start_session_mode()
 
 
 func _build_map(map_id: String) -> void:

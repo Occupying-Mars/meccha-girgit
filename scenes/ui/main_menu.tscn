@@ -216,7 +216,7 @@ theme_override_constants/separation = 10
 [node name="Code" type="LineEdit" parent="Center/Card/Margin/VBox/JoinRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "invite code"
+placeholder_text = "invite code or server IP"
 
 [node name="JoinBtn" type="Button" parent="Center/Card/Margin/VBox/JoinRow"]
 custom_minimum_size = Vector2(90, 0)

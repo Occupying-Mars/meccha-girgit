@@ -22,18 +22,12 @@ func _ready() -> void:
 	NetSession.players_changed.connect(_refresh)
 	GameState.phase_changed.connect(_on_phase)
 
-	var host := NetSession.is_host
-	_start.visible = host
-	_waiting.visible = not host
-	_code.text = "Invite code:  %s" % NetSession.invite_code() if host else "Connected — waiting in lobby"
-	_copy_btn.visible = host  # only the host has a code to share
 	_mode.text = "Mode:  %s" % ("Random seeker" if NetSession.mode == NetSession.Mode.RANDOM else "Decided seeker")
-	_seeker_pick.visible = host and NetSession.mode == NetSession.Mode.DECIDED
-
-	if host:
-		_start.pressed.connect(func (): NetSession.start_game())
-		_seeker_pick.item_selected.connect(_on_seeker_pick)
-		_copy_btn.pressed.connect(_on_copy)
+	# Wire controls once; admin-vs-not visibility is set in _refresh, because on a
+	# dedicated server the admin is only known once the first client registers.
+	_start.pressed.connect(func (): NetSession.request_start())
+	_seeker_pick.item_selected.connect(_on_seeker_pick)
+	_copy_btn.pressed.connect(_on_copy)
 	_refresh()
 
 
@@ -55,6 +49,21 @@ func _on_phase(p: int) -> void:
 
 
 func _refresh() -> void:
+	# Who controls the lobby (LAN host, or the dedicated-server admin).
+	var admin := NetSession.is_admin()
+	_start.visible = admin
+	_waiting.visible = not admin
+	if NetSession.dedicated:
+		_code.text = "Dedicated server" + ("  —  you're the admin" if admin else "")
+		_copy_btn.visible = false
+	elif NetSession.is_host:
+		_code.text = "Invite code:  %s" % NetSession.invite_code()
+		_copy_btn.visible = true
+	else:
+		_code.text = "Connected — waiting in lobby"
+		_copy_btn.visible = false
+	_seeker_pick.visible = admin and NetSession.mode == NetSession.Mode.DECIDED and not NetSession.dedicated
+
 	for c in _list.get_children():
 		c.queue_free()
 	for id in NetSession.players:

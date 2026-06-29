@@ -152,6 +152,9 @@ func _run_test_async() -> void:
 		"net_pause":
 			# (net hider client.) Open the Esc pause menu.
 			_net_pause()
+		"dedi_join":
+			# Join a dedicated server at 127.0.0.1; first joiner (admin) starts.
+			_dedi_join()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -230,6 +233,25 @@ func _net_shoot() -> void:
 	await get_tree().physics_frame
 	seeker._fire()
 	print("[recorder] net_shoot: seeker fired at hider ", hider.name)
+
+
+func _dedi_join() -> void:
+	await get_tree().create_timer(0.4).timeout
+	var err: int = await NetSession.join_game("Guest%d" % (randi() % 9000 + 1000), "127.0.0.1")
+	print("[recorder] dedi_join err=%s" % error_string(err))
+	if err != OK:
+		return
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(4.0).timeout
+	print("[recorder] is_admin=%s admin_id=%d players=%s" % [NetSession.is_admin(), NetSession.admin_id, str(NetSession.players)])
+	if NetSession.is_admin():
+		print("[recorder] I'm the admin -> request_start")
+		NetSession.request_start()
+	await get_tree().create_timer(3.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players != null:
+		for p in players.get_children():
+			print("[recorder] spawned %s role=%d mine=%s" % [p.name, p.role, str(p.is_multiplayer_authority())])
 
 
 func _net_pause() -> void:

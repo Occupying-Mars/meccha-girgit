@@ -27,6 +27,11 @@ const NORAY_PORT := 8890
 
 var active: bool = false
 var is_host: bool = false
+## Dedicated server: the server runs on a VPS with NO player of its own, and
+## everyone connects OUTBOUND to its public IP (works through any NAT, incl.
+## symmetric). One connected client is the "admin" who starts the match.
+var dedicated: bool = false
+var admin_id: int = 1   # who controls the lobby (host=1 on LAN; first client when dedicated)
 var username: String = "Player"
 var mode: int = Mode.RANDOM
 var decided_seeker_id: int = 1
@@ -118,7 +123,11 @@ func join_game(uname: String, code: String, want_online: bool = false) -> int:
 	online = want_online
 	if want_online:
 		return await _join_online(code.strip_edges())
+	# Accept a LAN invite code OR a raw server address (VPS public IP) so people
+	# can connect outbound to a dedicated server.
 	var info := parse_invite(code)
+	if info.is_empty():
+		info = _parse_address(code)
 	if info.is_empty():
 		return ERR_INVALID_PARAMETER
 	var peer := ENetMultiplayerPeer.new()
@@ -129,6 +138,33 @@ func join_game(uname: String, code: String, want_online: bool = false) -> int:
 	active = true
 	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
 	_connect_once(multiplayer.server_disconnected, _reset)
+	return OK
+
+
+## Raw "host" or "host:port" (a VPS IP) -> {ip, port}. {} if it's not an address.
+func _parse_address(s: String) -> Dictionary:
+	var t := s.strip_edges()
+	if t == "" or not t.contains("."):
+		return {}
+	var hp := t.split(":")
+	return {"ip": hp[0], "port": int(hp[1]) if hp.size() > 1 else PORT}
+
+
+## --- Dedicated server (runs on a VPS; no local player) ----------------------
+
+func host_dedicated(game_mode: int) -> int:
+	is_host = true
+	dedicated = true
+	mode = game_mode
+	var peer := ENetMultiplayerPeer.new()
+	var err := peer.create_server(PORT, MAX_PLAYERS)
+	if err != OK:
+		return err
+	multiplayer.multiplayer_peer = peer
+	active = true
+	players = {}        # the server is NOT a player
+	admin_id = 0        # assigned to the first client that joins
+	_connect_once(multiplayer.peer_disconnected, _on_peer_disconnected)
 	return OK
 
 
@@ -337,6 +373,9 @@ func _on_connected_to_server() -> void:
 func _on_peer_disconnected(id: int) -> void:
 	if multiplayer.is_server():
 		players.erase(id)
+		# If the dedicated-server admin left, hand control to another player.
+		if dedicated and id == admin_id:
+			admin_id = int(players.keys()[0]) if not players.is_empty() else 0
 		_broadcast_players()
 
 
@@ -344,11 +383,15 @@ func _on_peer_disconnected(id: int) -> void:
 func _register_player(uname: String) -> void:
 	if not multiplayer.is_server():
 		return
-	players[multiplayer.get_remote_sender_id()] = _clean_name(uname)
-	_netlog("host: peer %d JOINED as '%s' ✓" % [multiplayer.get_remote_sender_id(), _clean_name(uname)])
+	var id := multiplayer.get_remote_sender_id()
+	players[id] = _clean_name(uname)
+	# First client on a dedicated server becomes the admin (can start the match).
+	if dedicated and (admin_id == 0 or not players.has(admin_id)):
+		admin_id = id
+	_netlog("host: peer %d JOINED as '%s' ✓" % [id, _clean_name(uname)])
 	_broadcast_players()
 	# Tell the newcomer which map to build, so it's ready before the match starts.
-	_sync_map.rpc_id(multiplayer.get_remote_sender_id(), selected_map)
+	_sync_map.rpc_id(id, selected_map)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -360,6 +403,8 @@ func _sync_map(map_id: String) -> void:
 
 func _broadcast_players() -> void:
 	_sync_players.rpc(players)
+	if dedicated:
+		_sync_admin.rpc(admin_id)
 	players_changed.emit()  # host's own UI
 
 
@@ -368,6 +413,36 @@ func _sync_players(p: Dictionary) -> void:
 	if multiplayer.get_remote_sender_id() == 1:
 		players = p
 		players_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _sync_admin(aid: int) -> void:
+	if multiplayer.get_remote_sender_id() == 1:
+		dedicated = true
+		admin_id = aid
+		players_changed.emit()
+
+
+## True if THIS peer controls the lobby (LAN host, or the dedicated-server admin).
+func is_admin() -> bool:
+	if not multiplayer.has_multiplayer_peer():
+		return false
+	return multiplayer.get_unique_id() == admin_id
+
+
+## Start the match — works whether we're the server (LAN host) or the admin
+## client of a dedicated server.
+func request_start() -> void:
+	if multiplayer.is_server():
+		start_game()
+	else:
+		_server_start.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _server_start() -> void:
+	if multiplayer.is_server() and dedicated and multiplayer.get_remote_sender_id() == admin_id:
+		start_game()
 
 
 ## --- Start ------------------------------------------------------------------
@@ -429,6 +504,8 @@ func parse_invite(code: String) -> Dictionary:
 func _reset() -> void:
 	active = false
 	is_host = false
+	dedicated = false
+	admin_id = 1
 	players.clear()
 	multiplayer.multiplayer_peer = null
 
@@ -440,6 +517,8 @@ func leave() -> void:
 	multiplayer.multiplayer_peer = null
 	active = false
 	is_host = false
+	dedicated = false
+	admin_id = 1
 	online = false
 	online_oid = ""
 	host_oid = ""
