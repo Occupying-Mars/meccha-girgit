@@ -21,7 +21,7 @@ extends Node3D
 
 const FDIR := "res://assets/maps/furniture/"
 const ROOM := 8.0          # interior size of each room (square)
-const WALL_H := 3.0
+const WALL_H := 4.0        # tall enough that the roof clears a full-size seeker's head
 const WALL_T := 0.3
 const DOOR_W := 2.8        # doorway gap width
 const RX := 3              # rooms across (x)

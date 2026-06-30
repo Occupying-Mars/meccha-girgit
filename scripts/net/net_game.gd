@@ -274,6 +274,10 @@ func _on_session_started() -> void:
 	if NetSession.selected_map != _built_map:
 		_build_map(NetSession.selected_map)
 	if multiplayer.is_server():
+		# Let the map's colliders register in the physics space before we
+		# shape-query for clear spawn points (else spawns can land in furniture).
+		await get_tree().physics_frame
+		await get_tree().physics_frame
 		_started = true
 		GameState.prep_seconds = NetSession.prep_seconds
 		GameState.seek_seconds = NetSession.seek_seconds
@@ -510,22 +514,41 @@ func _spawn_pos(slot: int) -> Vector3:
 	return _clear_spawn(base)
 
 
-## Host-side: move a spawn point to the nearest spot not buried in geometry.
-## The map is already built by spawn time, so we can shape-query the world.
+## Host-side: move a spawn point to the nearest spot where a full STANDING body
+## fits, spiralling outward so a cluttered room (couch/table/etc.) can't wedge a
+## spawn inside furniture. Checks a body-height capsule (not a small sphere) so
+## low furniture like a coffee table is caught too.
 func _clear_spawn(pos: Vector3) -> Vector3:
 	var space := get_world_3d().direct_space_state
 	if space == null:
 		return pos
-	var shape := SphereShape3D.new()
-	shape.radius = 0.45
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.35
+	shape.height = 1.5
 	var q := PhysicsShapeQueryParameters3D.new()
 	q.shape = shape
-	q.collision_mask = 1  # walls/props (the sphere sits above the floor)
-	for off in [Vector3.ZERO, Vector3(1.4, 0, 0), Vector3(-1.4, 0, 0), Vector3(0, 0, 1.4),
-			Vector3(0, 0, -1.4), Vector3(1.4, 0, 1.4), Vector3(-1.4, 0, -1.4),
-			Vector3(2.6, 0, 0), Vector3(0, 0, 2.6), Vector3(-2.6, 0, 0)]:
-		var p: Vector3 = pos + off
-		q.transform = Transform3D(Basis(), p + Vector3(0, 0.6, 0))
-		if space.intersect_shape(q, 1).is_empty():
-			return p
-	return pos
+	q.collision_mask = 1  # walls + furniture (the capsule sits above the floor)
+	if _spawn_spot_clear(space, q, pos):
+		return pos
+	for ring in [1.0, 1.8, 2.6, 3.4]:
+		for deg in range(0, 360, 40):
+			var a := deg_to_rad(float(deg))
+			var p: Vector3 = pos + Vector3(cos(a) * ring, 0.0, sin(a) * ring)
+			if _spawn_spot_clear(space, q, p):
+				return p
+	return spawn_base  # last resort: the room centre
+
+
+func _spawn_spot_clear(space: PhysicsDirectSpaceState3D, q: PhysicsShapeQueryParameters3D, p: Vector3) -> bool:
+	# (a) a standing-body capsule (~y 0.1..1.6) fits clear of furniture, AND
+	# (b) the spot is in the same room as spawn_base — a ray to the room centre,
+	#     run high (y 2.8, above the furniture but below the ceiling) so it only
+	#     trips on WALLS, must be clear. Stops nudges escaping through a wall to
+	#     outside the house.
+	q.transform = Transform3D(Basis(), Vector3(p.x, 0.85, p.z))
+	if not space.intersect_shape(q, 1).is_empty():
+		return false
+	var ray := PhysicsRayQueryParameters3D.create(
+		Vector3(p.x, 2.8, p.z), Vector3(spawn_base.x, 2.8, spawn_base.z))
+	ray.collision_mask = 1
+	return space.intersect_ray(ray).is_empty()
