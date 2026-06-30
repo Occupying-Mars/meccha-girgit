@@ -50,6 +50,8 @@ var HD := RZ * ROOM / 2.0
 var _wall_material: StandardMaterial3D
 var _ceil_material: StandardMaterial3D
 var _floor_materials := {}
+var _furn_detail: Texture2D
+var _furn_done := {}
 
 
 func _x(v: float) -> float: return v - HW   # local house coord -> centered world x
@@ -361,19 +363,42 @@ func _pictures(rx: int, rz: int, solid: Array, rng: RandomNumberGenerator) -> vo
 
 
 func _ceiling_light(cx: float, cz: float) -> void:
-	# A downward spotlight from the ceiling — a real pool of warm light that
-	# casts shadows under the furniture.
+	# Bright, fairly neutral ceiling light + a soft fill + a visible glowing panel
+	# fixture, for the bright, evenly-lit look of a real room (not a moody spot).
 	var sl := SpotLight3D.new()
-	sl.position = Vector3(_x(cx), WALL_H - 0.25, _z(cz))
+	sl.position = Vector3(_x(cx), WALL_H - 0.2, _z(cz))
 	sl.rotation_degrees = Vector3(-90, 0, 0)
-	sl.light_color = Color(1.0, 0.92, 0.80)
-	sl.light_energy = 9.0
-	sl.spot_range = WALL_H + 3.5
-	sl.spot_angle = 66.0
-	sl.spot_angle_attenuation = 0.4
+	sl.light_color = Color(1.0, 0.97, 0.92)
+	sl.light_energy = 12.0
+	sl.spot_range = WALL_H + 4.0
+	sl.spot_angle = 72.0
+	sl.spot_angle_attenuation = 0.3
 	sl.shadow_enabled = true
-	sl.shadow_bias = 0.05
+	sl.shadow_bias = 0.04
 	add_child(sl)
+	# Soft fill so corners read (even brightness), shadow-free + cheap.
+	var fill := OmniLight3D.new()
+	fill.position = Vector3(_x(cx), WALL_H - 0.7, _z(cz))
+	fill.light_color = Color(1.0, 0.98, 0.95)
+	fill.light_energy = 1.7
+	fill.omni_range = ROOM * 1.1
+	fill.omni_attenuation = 1.0
+	add_child(fill)
+	# Visible glowing light-panel fixture on the ceiling.
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(2.6, 0.12, 2.6)
+	var em := StandardMaterial3D.new()
+	em.albedo_color = Color(1.0, 1.0, 0.97)
+	em.emission_enabled = true
+	em.emission = Color(1.0, 0.98, 0.92)
+	em.emission_energy_multiplier = 3.0
+	bm.surface_set_material(0, em)
+	mi.mesh = bm
+	mi.position = Vector3(_x(cx), WALL_H - 0.06, _z(cz))
+	mi.layers = MINIMAP_HIDE_LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 # --- placement primitives ---
@@ -385,6 +410,7 @@ func _piece(piece: String, lx: float, lz: float, rot_y: float) -> void:
 	body.rotation_degrees.y = rot_y
 	var inst: Node3D = P[piece].instantiate()
 	body.add_child(inst)
+	_detail_furniture(inst)
 	add_child(body)
 	var ab := _aabb_of(inst)
 	if ab.size == Vector3.ZERO:
@@ -455,23 +481,74 @@ func _floor_mat(kind: String) -> StandardMaterial3D:
 	return _floor_materials[kind]
 
 
-## Triplanar PBR material from a Poly Haven CC0 texture set (diffuse + normal).
+## Triplanar PBR material from a Poly Haven CC0 set (diffuse + normal + roughness).
+## Strong normals + a real roughness map = visible relief and varied gloss, so
+## the surface doesn't read as flat/smooth plastic.
 func _pbr(texname: String, rough: float, world_scale: float) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	var d := "res://assets/maps/house_tex/" + texname + "_diff.jpg"
 	var nor := "res://assets/maps/house_tex/" + texname + "_nor.jpg"
+	var rgh := "res://assets/maps/house_tex/" + texname + "_rough.jpg"
 	if ResourceLoader.exists(d):
 		m.albedo_texture = load(d)
 	if ResourceLoader.exists(nor):
 		m.normal_enabled = true
 		m.normal_texture = load(nor)
-		m.normal_scale = 1.0
+		m.normal_scale = 2.2
+	if ResourceLoader.exists(rgh):
+		m.roughness_texture = load(rgh)
 	m.roughness = rough
 	m.uv1_triplanar = true
 	m.uv1_world_triplanar = true
 	m.uv1_scale = Vector3(world_scale, world_scale, world_scale)
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
+
+
+## Break up the KayKit furniture's flat plastic look: matte it down and add a
+## fine detail-normal so surfaces read as fabric/wood micro-texture, not smooth
+## blobs. Each shared material is touched once.
+func _detail_furniture(root: Node) -> void:
+	var stack: Array = [root]
+	while not stack.is_empty():
+		var nd = stack.pop_back()
+		for c in nd.get_children():
+			stack.push_back(c)
+		if nd is MeshInstance3D and nd.mesh != null:
+			for s in nd.mesh.get_surface_count():
+				var mat = nd.mesh.surface_get_material(s)
+				if mat is StandardMaterial3D and not _furn_done.has(mat.get_instance_id()):
+					_furn_done[mat.get_instance_id()] = true
+					mat.roughness = maxf(mat.roughness, 0.88)
+					mat.metallic = 0.0
+					mat.detail_enabled = true
+					# White detail albedo + MUL = colour unchanged; only the detail
+					# normal adds fabric/wood micro-relief (MIX would wash it white).
+					mat.detail_albedo = _white_tex()
+					mat.detail_normal = _furniture_detail_normal()
+					mat.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+
+
+func _white_tex() -> Texture2D:
+	var img := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	img.fill(Color.WHITE)
+	return ImageTexture.create_from_image(img)
+
+
+func _furniture_detail_normal() -> Texture2D:
+	if _furn_detail == null:
+		var n := FastNoiseLite.new()
+		n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+		n.frequency = 0.32
+		var t := NoiseTexture2D.new()
+		t.width = 256
+		t.height = 256
+		t.seamless = true
+		t.as_normal_map = true
+		t.bump_strength = 1.4
+		t.noise = n
+		_furn_detail = t
+	return _furn_detail
 
 
 # Combined AABB of all MeshInstance3D under `node`, in node-local space.

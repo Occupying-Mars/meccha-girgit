@@ -49,8 +49,8 @@ const MAPS := {
 		"script": "res://scripts/core/house_builder.gd",
 		"spawn": Vector3(-8.0, 0.6, -4.0),
 		"require": "res://assets/maps/furniture/couch.gltf",
-		"ambient": 0.55, "sun": 1.0, "exposure": 1.0, "ssil": true,
-		"warm_ambient": Color(0.50, 0.47, 0.44),
+		"ambient": 0.85, "sun": 1.0, "exposure": 1.05, "ssil": true,
+		"warm_ambient": Color(0.56, 0.55, 0.53),
 	},
 	"arena": {
 		"label": "Test Arena",
@@ -215,8 +215,8 @@ func _apply_quality(env: Environment, info: Dictionary) -> void:
 	env.glow_hdr_threshold = 1.0
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.0
-	env.adjustment_contrast = 1.07
-	env.adjustment_saturation = 1.12
+	env.adjustment_contrast = 1.10
+	env.adjustment_saturation = 1.18
 	if info.get("fog", false):
 		env.fog_enabled = true
 		env.fog_light_color = info.get("fog_color", Color(0.72, 0.74, 0.80))
