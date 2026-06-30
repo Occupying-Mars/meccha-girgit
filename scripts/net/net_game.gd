@@ -44,6 +44,13 @@ const MAPS := {
 		"dark_bg": true, "ambient_color": Color(0.40, 0.42, 0.55),
 		"ambient": 0.55, "sun": 0.55, "exposure": 0.85,
 	},
+	"house": {
+		"label": "House / Mansion",
+		"script": "res://scripts/core/house_builder.gd",
+		"spawn": Vector3(-8.0, 0.6, -4.0),
+		"require": "res://assets/maps/furniture/couch.gltf",
+		"ambient": 0.95, "sun": 1.15, "exposure": 1.0,
+	},
 	"arena": {
 		"label": "Test Arena",
 		"script": "res://scripts/core/arena_builder.gd",
