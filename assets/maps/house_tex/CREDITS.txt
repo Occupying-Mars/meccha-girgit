@@ -1,0 +1,10 @@
+House map surface textures — CC0 (public domain), from Poly Haven (polyhaven.com).
+No attribution required; credited here as good practice.
+
+  wood   = wood_floor_deck   (wood-plank floors: bedroom / library / study)
+  wood2  = wood_planks       (living room / lounge floors)
+  tile   = floor_tiles_06    (dining room floor)
+  wall   = plastered_wall_02 (interior walls)
+
+Each set: <name>_diff.jpg (albedo) + <name>_nor.jpg (normal map).
+Applied as world-space triplanar materials in scripts/core/house_builder.gd.

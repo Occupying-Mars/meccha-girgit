@@ -49,7 +49,8 @@ const MAPS := {
 		"script": "res://scripts/core/house_builder.gd",
 		"spawn": Vector3(-8.0, 0.6, -4.0),
 		"require": "res://assets/maps/furniture/couch.gltf",
-		"ambient": 0.95, "sun": 1.15, "exposure": 1.0,
+		"ambient": 0.55, "sun": 1.0, "exposure": 1.0, "ssil": true,
+		"warm_ambient": Color(0.50, 0.47, 0.44),
 	},
 	"arena": {
 		"label": "Test Arena",
@@ -175,6 +176,12 @@ func _apply_lighting(info: Dictionary) -> void:
 		env.background_color = Color(0.03, 0.03, 0.05)
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = info.get("ambient_color", Color(0.45, 0.45, 0.55))
+	elif info.has("warm_ambient"):
+		# Roofed-but-bright interior: sky outside, warm cosy fill within (the
+		# rooms are actually lit by their own ceiling spots + lamps).
+		env.background_mode = Environment.BG_SKY
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = info["warm_ambient"]
 	else:
 		env.background_mode = Environment.BG_SKY
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
@@ -184,6 +191,43 @@ func _apply_lighting(info: Dictionary) -> void:
 		env.tonemap_exposure = info["exposure"]
 	if info.has("sun"):
 		_sun.light_energy = info["sun"]
+	_apply_quality(env, info)
+
+
+## Shared post-processing — depth (SSAO/SSIL), filmic tone, soft bloom, colour
+## grade and soft sun shadows. Lifts every map from flat-shaded to polished.
+func _apply_quality(env: Environment, info: Dictionary) -> void:
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 1.6
+	env.ssao_enabled = true
+	env.ssao_radius = 1.4
+	env.ssao_intensity = 2.6
+	env.ssao_power = 1.7
+	env.ssao_detail = 0.6
+	env.ssil_enabled = info.get("ssil", false)
+	env.ssil_radius = 4.0
+	env.ssil_intensity = 1.1
+	env.glow_enabled = true
+	env.glow_intensity = 0.65
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.08
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	env.glow_hdr_threshold = 1.0
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.0
+	env.adjustment_contrast = 1.07
+	env.adjustment_saturation = 1.12
+	if info.get("fog", false):
+		env.fog_enabled = true
+		env.fog_light_color = info.get("fog_color", Color(0.72, 0.74, 0.80))
+		env.fog_density = 0.01
+		env.fog_aerial_perspective = 0.3
+	else:
+		env.fog_enabled = false
+	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	_sun.shadow_blur = 1.4
+	_sun.light_angular_distance = 1.2
+	_sun.shadow_bias = 0.05
 
 
 func _start_session_mode() -> void:

@@ -8,8 +8,12 @@ extends Node3D
 ## a row of beds, a run of bookcases, chairs around a table) so a painted, posed
 ## hider reads as "one more object in the set" instead of a lone silhouette.
 ##
-## The furniture pack ships no walls/floor, so structure is primitive (painted
-## drywall + per-room wood/tile floors) and the furniture GLTFs sit on top.
+## Built for a polished, lit look: rooms are ROOFED (ceiling panels block the
+## sky so interiors are lit by warm shadow-casting ceiling spotlights + lamp
+## glows, giving real pools of light and shadows under the furniture). Ceilings
+## live on the minimap-hidden render layer so the top-down map still reads the
+## rooms. Walls/floors carry surface-relief normals so they aren't flat blocks.
+##
 ## Layout is DETERMINISTIC (fixed seed) so every networked peer builds an
 ## identical house. Furniture collision is auto-derived from each piece's mesh
 ## AABB; everything (incl. floors/walls) is a StaticBody so the seeker's
@@ -23,13 +27,14 @@ const DOOR_W := 2.8        # doorway gap width
 const RX := 3              # rooms across (x)
 const RZ := 2              # rooms deep (z)
 const SEED := 24601
+const MINIMAP_HIDE_LAYER := 1 << 9  # matches HiderBody — minimap camera culls this
 
-const WALL_COLOR := Color(0.86, 0.82, 0.73)
-const FLOOR_WOOD := Color(0.56, 0.40, 0.26)
+const WALL_COLOR := Color(0.87, 0.83, 0.75)
+const CEIL_COLOR := Color(0.90, 0.89, 0.86)
+const FLOOR_WOOD := Color(0.52, 0.36, 0.22)
 const FLOOR_TILE := Color(0.80, 0.80, 0.85)
-const FLOOR_RED  := Color(0.55, 0.34, 0.30)
+const FLOOR_RED  := Color(0.52, 0.31, 0.27)
 
-# Each room: which floor + the identical pieces it arranges for camouflage.
 const THEME_GRID := [
 	["living", "library", "bedroom"],
 	["dining", "lounge", "study"],
@@ -41,6 +46,10 @@ var _door_h := {}           # Vector2i(rx,rz) -> doorway on SOUTH wall
 
 var HW := RX * ROOM / 2.0
 var HD := RZ * ROOM / 2.0
+
+var _wall_material: StandardMaterial3D
+var _ceil_material: StandardMaterial3D
+var _floor_materials := {}
 
 
 func _x(v: float) -> float: return v - HW   # local house coord -> centered world x
@@ -56,6 +65,7 @@ func _ready() -> void:
 	_carve_maze(rng)
 	_build_floor()
 	_build_walls()
+	_build_ceiling()
 	for rz in RZ:
 		for rx in RX:
 			_decorate(rx, rz, THEME_GRID[rz][rx], rng)
@@ -89,7 +99,6 @@ func _carve_maze(rng: RandomNumberGenerator) -> void:
 		_open(cur, nxt)
 		visited[nxt] = true
 		stack.push_back(nxt)
-	# A couple of extra doorways so the house has alternate routes, not a pure tree.
 	for _k in 2:
 		var c := Vector2i(rng.randi() % RX, rng.randi() % RZ)
 		var ns := _all_neighbors(c)
@@ -138,16 +147,13 @@ func _solid_walls(rx: int, rz: int) -> Array:
 	return s
 
 
-# --- structure (primitive) ---
+# --- structure (primitive, textured-feel materials) ---
 func _build_floor() -> void:
 	for rz in RZ:
 		for rx in RX:
 			var f: String = _theme_floor(THEME_GRID[rz][rx])
-			var col := FLOOR_WOOD
-			if f == "tile": col = FLOOR_TILE
-			elif f == "red": col = FLOOR_RED
-			_prim_static("Floor", Vector3(_x(_rcx(rx)), -0.2, _z(_rcz(rz))),
-					Vector3(ROOM, 0.4, ROOM), col)  # top face at y=0
+			_surface("Floor", Vector3(_x(_rcx(rx)), -0.2, _z(_rcz(rz))),
+					Vector3(ROOM, 0.4, ROOM), _floor_mat(f), 0)
 
 
 func _theme_floor(name: String) -> String:
@@ -158,13 +164,11 @@ func _theme_floor(name: String) -> String:
 
 
 func _build_walls() -> void:
-	# Vertical boundary lines (separate east-west neighbors) at x = c*ROOM.
 	for c in range(RX + 1):
 		for rz in range(RZ):
 			var internal := c > 0 and c < RX
 			var door: bool = internal and _door_v.get(Vector2i(c - 1, rz), false)
 			_wall_run("z", c * ROOM, rz * ROOM, (rz + 1) * ROOM, door)
-	# Horizontal boundary lines at z = r*ROOM.
 	for r in range(RZ + 1):
 		for rx in range(RX):
 			var internal := r > 0 and r < RZ
@@ -178,6 +182,8 @@ func _wall_run(axis: String, fixed: float, lo: float, hi: float, door: bool) -> 
 		var g := DOOR_W / 2.0
 		_wall_box(axis, fixed, lo, mid - g)
 		_wall_box(axis, fixed, mid + g, hi)
+		# A header/lintel over the doorway so it reads as a framed opening.
+		_lintel(axis, fixed, mid - g, mid + g)
 	else:
 		_wall_box(axis, fixed, lo, hi)
 
@@ -195,7 +201,37 @@ func _wall_box(axis: String, fixed: float, a: float, b: float) -> void:
 	else:
 		pos = Vector3(_x(mid), WALL_H / 2.0, _z(fixed))
 		size = Vector3(length, WALL_H, WALL_T)
-	_prim_static("Wall", pos, size, WALL_COLOR)
+	_surface("Wall", pos, size, _wall_mat(), 0)
+
+
+func _lintel(axis: String, fixed: float, a: float, b: float) -> void:
+	var length := b - a
+	var mid := (a + b) / 2.0
+	var pos: Vector3
+	var size: Vector3
+	if axis == "z":
+		pos = Vector3(_x(fixed), WALL_H - 0.35, _z(mid))
+		size = Vector3(WALL_T, 0.7, length)
+	else:
+		pos = Vector3(_x(mid), WALL_H - 0.35, _z(fixed))
+		size = Vector3(length, 0.7, WALL_T)
+	_surface("Lintel", pos, size, _wall_mat(), 0)
+
+
+func _build_ceiling() -> void:
+	# Visual-only roof panels (no collision) on the minimap-hidden layer; they
+	# cast shadow so the sky is blocked and rooms are lamp-lit.
+	for rz in RZ:
+		for rx in RX:
+			var mi := MeshInstance3D.new()
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(ROOM, 0.2, ROOM)
+			mi.mesh = mesh
+			mi.material_override = _ceil_mat()
+			mi.position = Vector3(_x(_rcx(rx)), WALL_H + 0.1, _z(_rcz(rz)))
+			mi.layers = MINIMAP_HIDE_LAYER
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			add_child(mi)
 
 
 # --- furniture arrangement per room ---
@@ -227,7 +263,6 @@ func _decorate(rx: int, rz: int, theme: String, rng: RandomNumberGenerator) -> v
 			_corner_accent("lamp_standing", rx, rz, rng)
 		"dining":
 			_piece("table_medium_long", cx, cz, 0.0)
-			# A run of identical chairs down both long sides — classic "be a chair" camo.
 			for k in 3:
 				var t: float = (float(k) + 0.5) / 3.0
 				var lx: float = lerp(cx - 1.4, cx + 1.4, t)
@@ -247,12 +282,10 @@ func _decorate(rx: int, rz: int, theme: String, rng: RandomNumberGenerator) -> v
 			_clutter("book_single", cx, cz, 0.0, 0.9)
 			_corner_accent("lamp_standing", rx, rz, rng)
 
-	# Picture frames on a solid wall + a warm ceiling light per room.
 	_pictures(rx, rz, solid, rng)
 	_ceiling_light(cx, cz)
 
 
-# Place `count` identical pieces evenly along the inside of a wall, facing in.
 func _row(piece: String, wall: String, rx: int, rz: int, count: int, inset: float) -> void:
 	if not P.has(piece):
 		return
@@ -284,10 +317,18 @@ func _corner_accent(piece: String, rx: int, rz: int, rng: RandomNumberGenerator)
 	]
 	var c: Vector2 = corners[rng.randi() % corners.size()]
 	_piece(piece, c.x, c.y, rng.randf_range(0, 360))
+	# A standing lamp throws its own warm glow.
+	if piece == "lamp_standing":
+		var gl := OmniLight3D.new()
+		gl.position = Vector3(_x(c.x), 2.1, _z(c.y))
+		gl.light_color = Color(1.0, 0.83, 0.55)
+		gl.light_energy = 3.0
+		gl.omni_range = 4.5
+		gl.omni_attenuation = 1.6
+		add_child(gl)
 
 
 func _clutter(piece: String, cx: float, cz: float, rot: float, on_table_y: float) -> void:
-	# Small item resting on a table-height surface (books on a desk, etc.).
 	if not P.has(piece):
 		return
 	var inst: Node3D = P[piece].instantiate()
@@ -320,19 +361,23 @@ func _pictures(rx: int, rz: int, solid: Array, rng: RandomNumberGenerator) -> vo
 
 
 func _ceiling_light(cx: float, cz: float) -> void:
-	var light := OmniLight3D.new()
-	light.position = Vector3(_x(cx), 3.4, _z(cz))
-	light.light_color = Color(1.0, 0.93, 0.82)
-	light.light_energy = 2.2
-	light.omni_range = ROOM * 1.4
-	light.omni_attenuation = 1.2
-	add_child(light)
+	# A downward spotlight from the ceiling — a real pool of warm light that
+	# casts shadows under the furniture.
+	var sl := SpotLight3D.new()
+	sl.position = Vector3(_x(cx), WALL_H - 0.25, _z(cz))
+	sl.rotation_degrees = Vector3(-90, 0, 0)
+	sl.light_color = Color(1.0, 0.92, 0.80)
+	sl.light_energy = 9.0
+	sl.spot_range = WALL_H + 3.5
+	sl.spot_angle = 66.0
+	sl.spot_angle_attenuation = 0.4
+	sl.shadow_enabled = true
+	sl.shadow_bias = 0.05
+	add_child(sl)
 
 
 # --- placement primitives ---
 func _piece(piece: String, lx: float, lz: float, rot_y: float) -> void:
-	# Furniture GLTF under a StaticBody with an auto-AABB collider. Visual lives
-	# UNDER the collider so the eyedropper ray finds the mesh to sample its color.
 	if not P.has(piece):
 		return
 	var body := StaticBody3D.new()
@@ -353,7 +398,6 @@ func _piece(piece: String, lx: float, lz: float, rot_y: float) -> void:
 
 
 func _rug(piece: String, cx: float, cz: float) -> void:
-	# Flat, no collision — purely visual floor cover.
 	if not P.has(piece):
 		return
 	var inst: Node3D = P[piece].instantiate()
@@ -361,7 +405,7 @@ func _rug(piece: String, cx: float, cz: float) -> void:
 	add_child(inst)
 
 
-func _prim_static(node_name: String, pos: Vector3, size: Vector3, color: Color) -> void:
+func _surface(node_name: String, pos: Vector3, size: Vector3, mat: Material, layer: int) -> void:
 	var body := StaticBody3D.new()
 	body.name = node_name
 	body.position = pos
@@ -369,7 +413,9 @@ func _prim_static(node_name: String, pos: Vector3, size: Vector3, color: Color) 
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	mi.mesh = mesh
-	mi.material_override = _mat(color)
+	mi.material_override = mat
+	if layer != 0:
+		mi.layers = layer
 	body.add_child(mi)
 	var col := CollisionShape3D.new()
 	var shp := BoxShape3D.new()
@@ -379,10 +425,52 @@ func _prim_static(node_name: String, pos: Vector3, size: Vector3, color: Color) 
 	add_child(body)
 
 
-func _mat(color: Color) -> StandardMaterial3D:
+# --- materials: triplanar CC0 PBR textures (Poly Haven) so surfaces read as real
+# wood / tile / plaster instead of flat colour. World triplanar = no UV stretch
+# on the primitive boxes and a seamless run across the whole house. ---
+func _wall_mat() -> StandardMaterial3D:
+	if _wall_material == null:
+		_wall_material = _pbr("wall", 0.95, 0.35)
+	return _wall_material
+
+
+func _ceil_mat() -> StandardMaterial3D:
+	if _ceil_material == null:
+		_ceil_material = StandardMaterial3D.new()
+		_ceil_material.albedo_color = CEIL_COLOR
+		_ceil_material.roughness = 1.0
+	return _ceil_material
+
+
+func _floor_mat(kind: String) -> StandardMaterial3D:
+	if not _floor_materials.has(kind):
+		var texname := "tile"
+		var rough := 0.55
+		var scale := 0.6
+		if kind == "red":
+			texname = "wood2"; rough = 0.68; scale = 0.45
+		elif kind != "tile":
+			texname = "wood"; rough = 0.7; scale = 0.45
+		_floor_materials[kind] = _pbr(texname, rough, scale)
+	return _floor_materials[kind]
+
+
+## Triplanar PBR material from a Poly Haven CC0 texture set (diffuse + normal).
+func _pbr(texname: String, rough: float, world_scale: float) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = 0.9
+	var d := "res://assets/maps/house_tex/" + texname + "_diff.jpg"
+	var nor := "res://assets/maps/house_tex/" + texname + "_nor.jpg"
+	if ResourceLoader.exists(d):
+		m.albedo_texture = load(d)
+	if ResourceLoader.exists(nor):
+		m.normal_enabled = true
+		m.normal_texture = load(nor)
+		m.normal_scale = 1.0
+	m.roughness = rough
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3(world_scale, world_scale, world_scale)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	return m
 
 
