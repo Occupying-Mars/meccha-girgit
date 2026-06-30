@@ -399,14 +399,46 @@ func _register_player(uname: String) -> void:
 		admin_id = id
 	_netlog("host: peer %d JOINED as '%s' ✓" % [id, _clean_name(uname)])
 	_broadcast_players()
-	# Tell the newcomer which map to build, so it's ready before the match starts.
-	_sync_map.rpc_id(id, selected_map)
+	# Sync the server's current lobby settings (map/mode/times) to the newcomer so
+	# their lobby shows the real, persisted state — not their own client defaults.
+	_apply_settings.rpc_id(id, game_mode, selected_map, prep_seconds, seek_seconds)
+
+
+## --- Lobby settings: server-authoritative, persist across rounds -------------
+## The admin pushes any picker change to the server; the server stores it and
+## mirrors it to every client. Round start then uses the SERVER's values, so the
+## map/mode/times never revert to a stale client default between rounds or on a
+## rejoin (the old "everyone lands on the wrong/debug map" bug).
+func push_settings() -> void:
+	if multiplayer.is_server():
+		_broadcast_settings()          # LAN host is itself the server
+	elif is_admin():
+		_admin_settings.rpc_id(1, game_mode, selected_map, prep_seconds, seek_seconds)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _admin_settings(gmode: int, map_id: String, prep: float, seek: float) -> void:
+	if multiplayer.is_server() and dedicated and multiplayer.get_remote_sender_id() == admin_id:
+		game_mode = gmode
+		selected_map = map_id
+		prep_seconds = prep
+		seek_seconds = seek
+		_broadcast_settings()
+
+
+func _broadcast_settings() -> void:
+	if multiplayer.has_multiplayer_peer() and not multiplayer.get_peers().is_empty():
+		_apply_settings.rpc(game_mode, selected_map, prep_seconds, seek_seconds)
+	map_changed.emit()  # server's own UI + map rebuild
 
 
 @rpc("authority", "call_remote", "reliable")
-func _sync_map(map_id: String) -> void:
+func _apply_settings(gmode: int, map_id: String, prep: float, seek: float) -> void:
 	if multiplayer.get_remote_sender_id() == 1:
+		game_mode = gmode
 		selected_map = map_id
+		prep_seconds = prep
+		seek_seconds = seek
 		map_changed.emit()
 
 
@@ -445,17 +477,14 @@ func request_start() -> void:
 	if multiplayer.is_server():
 		start_game()
 	else:
-		# Hand the admin's lobby picks (game mode + map + round times) to the server.
-		_server_start.rpc_id(1, game_mode, selected_map, prep_seconds, seek_seconds)
+		# The admin's picks are already pushed + stored on the server (push_settings),
+		# so just trigger the start — the server uses its own persisted settings.
+		_server_start.rpc_id(1)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _server_start(gmode: int, map_id: String, prep: float, seek: float) -> void:
+func _server_start() -> void:
 	if multiplayer.is_server() and dedicated and multiplayer.get_remote_sender_id() == admin_id:
-		game_mode = gmode
-		selected_map = map_id
-		prep_seconds = prep
-		seek_seconds = seek
 		start_game()
 
 
@@ -467,6 +496,7 @@ func start_game() -> void:
 	var ids := players.keys()
 	if ids.is_empty():
 		return
+	print("[net] round start: map=%s mode=%d players=%d" % [selected_map, game_mode, ids.size()])
 	var sids: Array = []
 	if mode == Mode.DECIDED and players.has(decided_seeker_id):
 		sids = [decided_seeker_id]

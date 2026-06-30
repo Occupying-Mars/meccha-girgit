@@ -17,6 +17,8 @@ extends CanvasLayer
 @onready var _waiting: Label = $Panel/Margin/VBox/Waiting
 @onready var _copy_btn: Button = $Panel/Margin/VBox/CopyBtn
 
+var _syncing := false  # true while mirroring server-pushed settings (no re-push)
+
 
 func _ready() -> void:
 	if not NetSession.active:
@@ -46,9 +48,11 @@ func _ready() -> void:
 	# Round-time controls — the admin's values are sent to the server on Start.
 	_hide_time.value = NetSession.prep_seconds
 	_seek_time.value = NetSession.seek_seconds
-	_hide_time.value_changed.connect(func (v): NetSession.prep_seconds = v)
-	_seek_time.value_changed.connect(func (v): NetSession.seek_seconds = v)
+	_hide_time.value_changed.connect(_on_hide_time)
+	_seek_time.value_changed.connect(_on_seek_time)
 	_start.pressed.connect(func (): NetSession.request_start())
+	# Mirror settings the server/admin pushes (so every lobby shows the real map).
+	NetSession.map_changed.connect(_sync_from_session)
 	_seeker_pick.item_selected.connect(_on_seeker_pick)
 	_copy_btn.pressed.connect(_on_copy)
 	_on_phase(GameState.phase)  # visible only while in ASSIGN
@@ -131,8 +135,41 @@ func _on_seeker_pick(index: int) -> void:
 
 func _on_game_mode_pick(index: int) -> void:
 	NetSession.game_mode = _game_mode_pick.get_item_id(index)
+	NetSession.push_settings()
 	_refresh()
 
 
 func _on_map_pick(index: int) -> void:
 	NetSession.selected_map = _map_pick.get_item_metadata(index)
+	NetSession.push_settings()
+
+
+func _on_hide_time(v: float) -> void:
+	if _syncing:
+		return
+	NetSession.prep_seconds = v
+	NetSession.push_settings()
+
+
+func _on_seek_time(v: float) -> void:
+	if _syncing:
+		return
+	NetSession.seek_seconds = v
+	NetSession.push_settings()
+
+
+## Server pushed new lobby settings — mirror them into the controls without
+## re-triggering a push (the _syncing guard stops the spinbox value_changed loop).
+func _sync_from_session() -> void:
+	if not is_node_ready():
+		return
+	_syncing = true
+	_game_mode_pick.select(clampi(NetSession.game_mode, 0, 2))
+	for i in _map_pick.item_count:
+		if _map_pick.get_item_metadata(i) == NetSession.selected_map:
+			_map_pick.select(i)
+			break
+	_hide_time.value = NetSession.prep_seconds
+	_seek_time.value = NetSession.seek_seconds
+	_syncing = false
+	_refresh()
