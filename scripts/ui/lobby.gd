@@ -10,6 +10,9 @@ extends CanvasLayer
 @onready var _seeker_pick: OptionButton = $Panel/Margin/VBox/SeekerPick
 @onready var _game_mode_pick: OptionButton = $Panel/Margin/VBox/GameModePick
 @onready var _map_pick: OptionButton = $Panel/Margin/VBox/MapPick
+@onready var _time_row: HBoxContainer = $Panel/Margin/VBox/TimeRow
+@onready var _hide_time: SpinBox = $Panel/Margin/VBox/TimeRow/HideTime
+@onready var _seek_time: SpinBox = $Panel/Margin/VBox/TimeRow/SeekTime
 @onready var _start: Button = $Panel/Margin/VBox/StartBtn
 @onready var _waiting: Label = $Panel/Margin/VBox/Waiting
 @onready var _copy_btn: Button = $Panel/Margin/VBox/CopyBtn
@@ -40,6 +43,11 @@ func _ready() -> void:
 		if id == NetSession.selected_map:
 			_map_pick.select(_map_pick.item_count - 1)
 	_map_pick.item_selected.connect(_on_map_pick)
+	# Round-time controls — the admin's values are sent to the server on Start.
+	_hide_time.value = NetSession.prep_seconds
+	_seek_time.value = NetSession.seek_seconds
+	_hide_time.value_changed.connect(func (v): NetSession.prep_seconds = v)
+	_seek_time.value_changed.connect(func (v): NetSession.seek_seconds = v)
 	_start.pressed.connect(func (): NetSession.request_start())
 	_seeker_pick.item_selected.connect(_on_seeker_pick)
 	_copy_btn.pressed.connect(_on_copy)
@@ -72,8 +80,9 @@ func _refresh() -> void:
 	var admin := NetSession.is_admin()
 	_start.visible = admin
 	_waiting.visible = not admin
-	_game_mode_pick.visible = admin  # only the admin chooses the mode + map
+	_game_mode_pick.visible = admin  # only the admin chooses the mode + map + times
 	_map_pick.visible = admin
+	_time_row.visible = admin
 	var gm_names := ["Normal", "Infection", "Double seeker"]
 	_mode.text = "Game mode:  %s" % gm_names[clampi(NetSession.game_mode, 0, 2)]
 	if NetSession.dedicated:

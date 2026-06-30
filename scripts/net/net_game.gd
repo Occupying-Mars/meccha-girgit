@@ -450,7 +450,31 @@ func _check_round_end() -> void:
 
 
 func _spawn_pos(slot: int) -> Vector3:
-	# Spread spawns by join order so avatars never overlap (grid from base).
-	var col := slot % 6
-	var row := slot / 6
-	return spawn_base + Vector3(float(col) * 2.0, 0.0, float(row) * 2.0)
+	# Tight grid CENTERED on spawn_base — the old wide grid pushed later joiners
+	# several metres out, landing them inside the room's edge walls. Then nudge
+	# the point off any wall/prop it still overlaps.
+	var col := slot % 4
+	var row := slot / 4
+	var base := spawn_base + Vector3((float(col) - 1.5) * 1.4, 0.0, (float(row) - 1.0) * 1.4)
+	return _clear_spawn(base)
+
+
+## Host-side: move a spawn point to the nearest spot not buried in geometry.
+## The map is already built by spawn time, so we can shape-query the world.
+func _clear_spawn(pos: Vector3) -> Vector3:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return pos
+	var shape := SphereShape3D.new()
+	shape.radius = 0.45
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.collision_mask = 1  # walls/props (the sphere sits above the floor)
+	for off in [Vector3.ZERO, Vector3(1.4, 0, 0), Vector3(-1.4, 0, 0), Vector3(0, 0, 1.4),
+			Vector3(0, 0, -1.4), Vector3(1.4, 0, 1.4), Vector3(-1.4, 0, -1.4),
+			Vector3(2.6, 0, 0), Vector3(0, 0, 2.6), Vector3(-2.6, 0, 0)]:
+		var p: Vector3 = pos + off
+		q.transform = Transform3D(Basis(), p + Vector3(0, 0.6, 0))
+		if space.intersect_shape(q, 1).is_empty():
+			return p
+	return pos

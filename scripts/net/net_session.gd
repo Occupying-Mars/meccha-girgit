@@ -445,15 +445,17 @@ func request_start() -> void:
 	if multiplayer.is_server():
 		start_game()
 	else:
-		# Hand the admin's lobby picks (game mode + map) to the server.
-		_server_start.rpc_id(1, game_mode, selected_map)
+		# Hand the admin's lobby picks (game mode + map + round times) to the server.
+		_server_start.rpc_id(1, game_mode, selected_map, prep_seconds, seek_seconds)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _server_start(gmode: int, map_id: String) -> void:
+func _server_start(gmode: int, map_id: String, prep: float, seek: float) -> void:
 	if multiplayer.is_server() and dedicated and multiplayer.get_remote_sender_id() == admin_id:
 		game_mode = gmode
 		selected_map = map_id
+		prep_seconds = prep
+		seek_seconds = seek
 		start_game()
 
 

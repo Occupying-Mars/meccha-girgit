@@ -64,6 +64,34 @@ layout_mode = 2
 [node name="MapPick" type="OptionButton" parent="Panel/Margin/VBox"]
 layout_mode = 2
 
+[node name="TimeRow" type="HBoxContainer" parent="Panel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HideLabel" type="Label" parent="Panel/Margin/VBox/TimeRow"]
+layout_mode = 2
+text = "Hide s"
+
+[node name="HideTime" type="SpinBox" parent="Panel/Margin/VBox/TimeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 10.0
+max_value = 900.0
+step = 5.0
+value = 45.0
+
+[node name="SeekLabel" type="Label" parent="Panel/Margin/VBox/TimeRow"]
+layout_mode = 2
+text = "Seek s"
+
+[node name="SeekTime" type="SpinBox" parent="Panel/Margin/VBox/TimeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 10.0
+max_value = 900.0
+step = 5.0
+value = 120.0
+
 [node name="PlayersTitle" type="Label" parent="Panel/Margin/VBox"]
 layout_mode = 2
 text = "Players:"
