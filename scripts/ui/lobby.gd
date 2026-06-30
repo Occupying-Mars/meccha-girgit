@@ -16,11 +16,11 @@ extends CanvasLayer
 
 
 func _ready() -> void:
-	if not NetSession.active or GameState.phase != GameState.Phase.ASSIGN:
+	if not NetSession.active:
 		visible = false
 		return
-	visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Always wire up — the lobby must re-open every time we return to ASSIGN
+	# (new round on a dedicated server, or a late joiner arriving mid-results).
 	NetSession.players_changed.connect(_refresh)
 	GameState.phase_changed.connect(_on_phase)
 
@@ -43,7 +43,7 @@ func _ready() -> void:
 	_start.pressed.connect(func (): NetSession.request_start())
 	_seeker_pick.item_selected.connect(_on_seeker_pick)
 	_copy_btn.pressed.connect(_on_copy)
-	_refresh()
+	_on_phase(GameState.phase)  # visible only while in ASSIGN
 
 
 func _on_copy() -> void:
@@ -55,7 +55,11 @@ func _on_copy() -> void:
 
 
 func _on_phase(p: int) -> void:
-	if p != GameState.Phase.ASSIGN:
+	if p == GameState.Phase.ASSIGN:
+		visible = true  # back in the lobby — show it + let the admin pick again
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_refresh()
+	else:
 		visible = false
 		# Capture the mouse for gameplay (PREP/SEEK) only. On RESULTS the results
 		# screen needs the cursor visible to click buttons — don't grab it back.

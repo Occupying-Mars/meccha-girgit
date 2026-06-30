@@ -345,7 +345,24 @@ func _on_phase_changed(phase: int) -> void:
 		for p in _players.get_children():
 			if p.role == NetPlayer.Role.HIDER:
 				p.set_score.rpc(p.score)
+		# A dedicated server must return to the lobby so the next round can start
+		# (and late joiners aren't stuck staring at an old results screen).
+		if NetSession.dedicated:
+			_dedicated_reset_after(10.0)
 	_sync_phase.rpc(phase, GameState.time_left())
+
+
+## Dedicated server: after the results linger a bit, clear avatars and drop back
+## to ASSIGN — the lobby re-opens and the admin can pick map/mode and start again.
+func _dedicated_reset_after(delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if GameState.phase != GameState.Phase.RESULTS:
+		return  # something already moved us on
+	for p in _players.get_children():
+		p.queue_free()
+	_started = false
+	GameState.set_phase(GameState.Phase.ASSIGN)
+	print("[dedicated] round over — back to lobby")
 
 
 @rpc("any_peer", "call_remote", "reliable")
