@@ -39,7 +39,7 @@ const MAPS := {
 	"dungeon": {
 		"label": "Dungeon (KayKit)",
 		"script": "res://scripts/core/kaykit_dungeon_builder.gd",
-		"spawn": Vector3(-12.0, 0.6, -12.0),
+		"spawn": Vector3(-6.0, 0.6, -8.0),
 		"require": "res://assets/maps/kaykit/floor.glb",
 		"dark_bg": true, "ambient_color": Color(0.40, 0.42, 0.55),
 		"ambient": 0.55, "sun": 0.55, "exposure": 0.85,

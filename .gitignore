@@ -35,3 +35,6 @@ assets/arenas/sponza/
 
 # Downloaded CC0 backrooms textures (fetchable; alternate map)
 assets/textures/backrooms/
+/DEDICATED_SERVER.md
+docs/PLAY_ONLINE.md
+docs/RELAY_ADMIN.md

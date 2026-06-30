@@ -21,9 +21,19 @@ func _ready() -> void:
 func _on_phase(phase: int) -> void:
 	if phase == GameState.Phase.RESULTS:
 		_show_results()
+	else:
+		# Any other phase (e.g. a restarted round drops to PREP) means the round
+		# is live again — get this overlay out of the way and hand control back.
+		visible = false
+		if phase == GameState.Phase.PREP or phase == GameState.Phase.SEEK:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _on_play_again() -> void:
+	# Hide immediately on click — don't wait for the phase round-trip (that delay
+	# is what left this overlay + button sitting on top of the restarted round).
+	visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	# Host restarts a fresh round; everyone returns via the synced phase change.
 	var game := get_tree().current_scene
 	if NetSession.is_host and game.has_method("restart_match"):

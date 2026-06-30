@@ -14,10 +14,10 @@ extends Node3D
 ## Collision is auto-derived from each piece's mesh AABB (no manual measuring).
 
 const T := 4.0
-const RX := 3     # rooms across (x)
+const RX := 2     # rooms across (x)
 const RZ := 3     # rooms deep (z)
 const RW := 3     # tiles per room (x)
-const RD := 3     # tiles per room (z)
+const RD := 2     # tiles per room (z)
 const NX := RX * RW
 const NZ := RZ * RD
 const SEED := 71777
@@ -37,9 +37,9 @@ const THEMES := {
 	"armory":   {"floor": "floor",           "row": "barrel_dec",   "pile": "crates_stacked", "wall": "sword_shield",  "bits": ["box_large", "table_long"]},
 }
 const THEME_GRID := [
-	["storage", "library", "treasure"],
-	["cellar",  "ritual",  "armory"],
-	["quarters","treasure","library"],
+	["storage", "library"],
+	["treasure", "cellar"],
+	["ritual", "armory"],
 ]
 
 var P := {}                 # piece name -> PackedScene

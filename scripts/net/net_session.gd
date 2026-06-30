@@ -24,6 +24,11 @@ const GAME_SCENE := "res://scenes/game/net_game.tscn"
 ## override it with the in-game Relay field (see docs/HOSTING_VPS.md).
 const NORAY_HOST := "tomfol.io"
 const NORAY_PORT := 8890
+## Pre-configured dedicated server ("ip" or "ip:port"). EMPTY in the public repo
+## so open-source builds default to peer hosting with invite codes. Set this as a
+## LOCAL-ONLY override to point your build at your own VPS — the menu then detects
+## it, defaults "Use your own server" on, and connects straight to it.
+const DEFAULT_SERVER := ""  # set to your VPS "ip[:port]" as a LOCAL-ONLY override
 
 var active: bool = false
 var is_host: bool = false

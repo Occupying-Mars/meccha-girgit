@@ -38,6 +38,9 @@ func _ready() -> void:
 	_cam.rotation_degrees = Vector3(-90.0, 0.0, 0.0)  # straight down, north-up
 	_cam.position = Vector3(0, 60, 0)
 	_cam.far = 300.0
+	# Render the map but NOT player bodies, so nobody's position leaks on the
+	# minimap — only your own arrow (drawn in 2D below) shows where you are.
+	_cam.cull_mask = 0xFFFFF & ~HiderBody.MINIMAP_HIDE_LAYER
 	_sub.add_child(_cam)
 	_cam.current = true
 

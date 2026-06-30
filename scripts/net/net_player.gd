@@ -130,15 +130,26 @@ func _configure_role() -> void:
 		_camera.transform.origin = Vector3.ZERO
 		_pitch_angle = 0.0
 		_pitch.rotation.x = 0.0
-		# The muzzle sits inside the seeker's own capsule — don't shoot self.
+		# Shots should land on the VISIBLE painted body, so cast against the paint
+		# trimesh (matches the mesh, and works even while a hider is wall-stuck and
+		# their movement capsule is disabled) + the world. Exclude our own capsule
+		# AND body parts so we never shoot ourselves.
+		_muzzle.collision_mask = 1 | HiderBody.PAINT_LAYER
 		_muzzle.add_exception(self)
+		for sb in _own_static_bodies():
+			_muzzle.add_exception(sb)
 	else:
 		add_to_group("hider")
 		move_speed = HIDER_SPEED
-		# Shrink the blob + its collider to a third; bring the camera down so
-		# the small hider still frames well in third person.
 		body.scale = Vector3.ONE * HIDER_SCALE
-		_collision.scale = Vector3.ONE * HIDER_SCALE
+		# Size the capsule DIRECTLY — node scale on a CollisionShape3D is often
+		# ignored by the physics server, which left the tiny hider floating a
+		# full-size radius off every wall.
+		var cap := CapsuleShape3D.new()
+		cap.radius = 0.25 * HIDER_SCALE
+		cap.height = 1.7 * HIDER_SCALE
+		_collision.shape = cap
+		_collision.scale = Vector3.ONE
 		_collision.position.y = 0.85 * HIDER_SCALE
 		_yaw.position.y = 1.4 * HIDER_SCALE + 0.15
 		_spring.spring_length = 1.4
@@ -165,6 +176,7 @@ func _setup_menus() -> void:
 
 
 func _process(_delta: float) -> void:
+	_drive_walk(_delta)  # animate the gait for every avatar (local + remote)
 	if not _is_mine:
 		return
 	# Esc: close an open paint/pose menu first, otherwise toggle the pause menu.
@@ -429,6 +441,44 @@ func _find_net_player(node: Node) -> NetPlayer:
 			return n
 		n = n.get_parent()
 	return null
+
+
+## Procedural walk: measure how fast this avatar is actually moving (works for
+## remote avatars too, off their synced position) and feed the gait. Smoothed so
+## the stepped network position updates don't make the legs stutter.
+var _walk_phase: float = 0.0
+var _walk_amount: float = 0.0
+var _walk_last: Vector3 = Vector3.ZERO
+var _walk_init: bool = false
+
+func _drive_walk(delta: float) -> void:
+	if body == null:
+		return
+	var p := global_position
+	if not _walk_init:
+		_walk_last = p
+		_walk_init = true
+	var horiz := Vector2(p.x - _walk_last.x, p.z - _walk_last.z)
+	_walk_last = p
+	var speed := horiz.length() / maxf(delta, 0.0001)
+	var target := clampf(speed / maxf(move_speed, 0.1), 0.0, 1.0)
+	_walk_amount = lerpf(_walk_amount, target, clampf(delta * 6.0, 0.0, 1.0))
+	_walk_phase += delta * 9.0 * _walk_amount
+	body.walk(_walk_phase, _walk_amount)
+
+
+## Every StaticBody3D under our own body (the per-part paint colliders) — used to
+## exclude ourselves from the shoot raycast now that it hits the paint layer.
+func _own_static_bodies() -> Array:
+	var out: Array = []
+	var stack: Array = [body]
+	while not stack.is_empty():
+		var n = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		if n is StaticBody3D:
+			out.append(n)
+	return out
 
 
 ## Host-authoritative: only accepted from the server (sender 1, or 0 = local

@@ -155,6 +155,10 @@ text = "Map"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="UseServerCheck" type="CheckBox" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+text = "Use your own server (VPS)"
+
 [node name="ServerRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
 theme_override_constants/separation = 10
@@ -168,12 +172,12 @@ text = "Server"
 layout_mode = 2
 size_flags_horizontal = 3
 text = ""
-placeholder_text = "server ip"
+placeholder_text = "server ip[:port]"
 
 [node name="JoinServerBtn" type="Button" parent="Center/Card/Margin/VBox"]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
-text = "▶  JOIN SERVER"
+text = "▶  CONNECT TO SERVER"
 
 [node name="TimerRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2

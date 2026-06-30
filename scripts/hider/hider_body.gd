@@ -14,6 +14,9 @@ class_name HiderBody
 const BLANK := Color(0.92, 0.92, 0.94)  # near-white starting blob
 const TEX_SIZE := 256
 const PAINT_LAYER := 1 << 2  # layer 3: only the paint cursor ray probes this
+## Render layer 10 — body parts go here so the minimap camera can cull them and
+## never reveal player positions (the seeker must not see hiders on the minimap).
+const MINIMAP_HIDE_LAYER := 1 << 9
 
 ## name -> MeshInstance3D
 var parts: Dictionary = {}
@@ -52,12 +55,14 @@ func _build() -> void:
 		m.rings = 16
 		return m
 
-	_add_part("head", sphere.call(0.16), Vector3(0, 1.56, 0))
-	_add_part("torso", capsule.call(0.22, 0.72), Vector3(0, 1.08, 0))
-	_add_part("arm_l", capsule.call(0.075, 0.62), Vector3(-0.30, 1.10, 0))
-	_add_part("arm_r", capsule.call(0.075, 0.62), Vector3(0.30, 1.10, 0))
-	_add_part("leg_l", capsule.call(0.10, 0.78), Vector3(-0.12, 0.42, 0))
-	_add_part("leg_r", capsule.call(0.10, 0.78), Vector3(0.12, 0.42, 0))
+	_add_part("head", sphere.call(0.17), Vector3(0, 1.57, 0))
+	_add_part("torso", capsule.call(0.23, 0.74), Vector3(0, 1.08, 0))
+	# Arms tucked closer to the torso (no floating gap) and a touch thicker.
+	_add_part("arm_l", capsule.call(0.085, 0.60), Vector3(-0.255, 1.10, 0))
+	_add_part("arm_r", capsule.call(0.085, 0.60), Vector3(0.255, 1.10, 0))
+	# Legs a bit sturdier and set slightly apart for a stable stance.
+	_add_part("leg_l", capsule.call(0.115, 0.76), Vector3(-0.13, 0.42, 0))
+	_add_part("leg_r", capsule.call(0.115, 0.76), Vector3(0.13, 0.42, 0))
 
 	for n in parts:
 		_base_xform[n] = parts[n].transform
@@ -71,6 +76,7 @@ func _add_part(part_name: String, mesh: Mesh, pos: Vector3) -> void:
 	# No body shadow — a person-shaped shadow on the floor/wall would give a
 	# painted, posed hider away instantly.
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = MINIMAP_HIDE_LAYER  # invisible to the minimap camera (see const)
 
 	var img := Image.create(TEX_SIZE, TEX_SIZE, false, Image.FORMAT_RGBA8)
 	img.fill(BLANK)
@@ -102,6 +108,31 @@ func _add_part(part_name: String, mesh: Mesh, pos: Vector3) -> void:
 		"uv": arr[Mesh.ARRAY_TEX_UV],
 		"i": arr[Mesh.ARRAY_INDEX],
 	}
+
+
+## --- Walk cycle -------------------------------------------------------------
+## Procedural gait: swing the arms + legs around their joints (arms opposite the
+## legs, like a real stride). Driven each frame by net_player from the avatar's
+## speed (`amount` 0..1; 0 = standing still). Overlays on the STAND pose and is
+## skipped while a hide pose owns the limb transforms.
+func walk(phase: float, amount: float) -> void:
+	if current_pose != "stand":
+		return
+	var amp := 0.6 * clampf(amount, 0.0, 1.0)
+	_swing("leg_l", Vector3(-0.13, 0.80, 0.0), sin(phase) * amp)
+	_swing("leg_r", Vector3(0.13, 0.80, 0.0), sin(phase + PI) * amp)
+	_swing("arm_l", Vector3(-0.255, 1.40, 0.0), sin(phase + PI) * amp)
+	_swing("arm_r", Vector3(0.255, 1.40, 0.0), sin(phase) * amp)
+
+
+## Rotate a limb around a joint (its top) by `angle` on the X axis (fwd/back).
+func _swing(part: String, pivot: Vector3, angle: float) -> void:
+	if not parts.has(part):
+		return
+	var base: Transform3D = _base_xform[part]
+	var rot := Basis(Vector3(1, 0, 0), angle)
+	var origin: Vector3 = pivot + rot * (base.origin - pivot)
+	parts[part].transform = Transform3D(rot * base.basis, origin)
 
 
 ## --- Freehand painting ------------------------------------------------------
