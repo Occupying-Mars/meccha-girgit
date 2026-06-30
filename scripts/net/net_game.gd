@@ -107,6 +107,7 @@ func _start_dedicated_server() -> void:
 	#   --dedicated [--map=backrooms] [--mode=random|decided] [--prep=N] [--seek=N]
 	var map_id := "backrooms"  # default needs no downloaded assets
 	var gmode := NetSession.Mode.RANDOM
+	var play_mode := 0  # game mode: 0 Normal · 1 Infection · 2 Double
 	var prep := 45.0
 	var seek := 120.0
 	for raw in OS.get_cmdline_user_args():
@@ -115,11 +116,15 @@ func _start_dedicated_server() -> void:
 			map_id = a.substr("--map=".length())
 		elif a.begins_with("--mode="):
 			gmode = NetSession.Mode.DECIDED if a.substr("--mode=".length()) == "decided" else NetSession.Mode.RANDOM
+		elif a.begins_with("--gamemode="):
+			var gm := a.substr("--gamemode=".length())
+			play_mode = 1 if gm == "infection" else (2 if gm == "double" else 0)
 		elif a.begins_with("--prep="):
 			prep = float(a.substr("--prep=".length()))
 		elif a.begins_with("--seek="):
 			seek = float(a.substr("--seek=".length()))
 	NetSession.selected_map = map_id
+	NetSession.game_mode = play_mode
 	NetSession.prep_seconds = prep
 	NetSession.seek_seconds = seek
 	var err := NetSession.host_dedicated(gmode)
@@ -392,9 +397,13 @@ func _request_eliminate(target_id: int) -> void:
 	var target := _players.get_node_or_null(str(target_id))
 	if target == null or target.caught or target.role != NetPlayer.Role.HIDER:
 		return
-	target.set_caught.rpc()
-	print("[net] eliminated hider ", target_id)
-	_check_all_caught()
+	if NetSession.game_mode == 1:  # INFECTION — caught hider joins the seekers
+		target.become_seeker.rpc()
+		print("[net] infected hider ", target_id)
+	else:
+		target.set_caught.rpc()
+		print("[net] eliminated hider ", target_id)
+	_check_round_end()
 
 
 ## Host-only: clear the round and start a fresh one (from the results menu).
@@ -409,18 +418,18 @@ func restart_match() -> void:
 	_on_session_started()  # respawns everyone + start_match (re-applies durations)
 
 
-func _check_all_caught() -> void:
-	# Seekers win as soon as every hider has been found.
-	var hiders := 0
-	var caught := 0
+func _check_round_end() -> void:
+	# Round ends when no hider is left "in play": caught (Normal/Double) or
+	# converted to a seeker (Infection). Either way, no active hiders remain.
+	if GameState.phase != GameState.Phase.SEEK:
+		return
+	var active_hiders := 0
 	for p in _players.get_children():
-		if p.role == NetPlayer.Role.HIDER:
-			hiders += 1
-			if p.caught:
-				caught += 1
-	if hiders > 0 and caught == hiders and GameState.phase == GameState.Phase.SEEK:
+		if p.role == NetPlayer.Role.HIDER and not p.caught:
+			active_hiders += 1
+	if active_hiders == 0:
 		GameState.set_phase(GameState.Phase.RESULTS)
-		print("[net] all hiders caught -> RESULTS")
+		print("[net] no hiders left -> RESULTS")
 
 
 func _spawn_pos(slot: int) -> Vector3:

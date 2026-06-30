@@ -8,6 +8,8 @@ extends CanvasLayer
 @onready var _mode: Label = $Panel/Margin/VBox/ModeLabel
 @onready var _list: VBoxContainer = $Panel/Margin/VBox/Players
 @onready var _seeker_pick: OptionButton = $Panel/Margin/VBox/SeekerPick
+@onready var _game_mode_pick: OptionButton = $Panel/Margin/VBox/GameModePick
+@onready var _map_pick: OptionButton = $Panel/Margin/VBox/MapPick
 @onready var _start: Button = $Panel/Margin/VBox/StartBtn
 @onready var _waiting: Label = $Panel/Margin/VBox/Waiting
 @onready var _copy_btn: Button = $Panel/Margin/VBox/CopyBtn
@@ -22,9 +24,22 @@ func _ready() -> void:
 	NetSession.players_changed.connect(_refresh)
 	GameState.phase_changed.connect(_on_phase)
 
-	_mode.text = "Mode:  %s" % ("Random seeker" if NetSession.mode == NetSession.Mode.RANDOM else "Decided seeker")
 	# Wire controls once; admin-vs-not visibility is set in _refresh, because on a
 	# dedicated server the admin is only known once the first client registers.
+	_game_mode_pick.clear()
+	_game_mode_pick.add_item("Normal — caught hiders are out", 0)
+	_game_mode_pick.add_item("Infection — caught hiders turn seeker", 1)
+	_game_mode_pick.add_item("Double seeker (3+ players)", 2)
+	_game_mode_pick.select(clampi(NetSession.game_mode, 0, 2))
+	_game_mode_pick.item_selected.connect(_on_game_mode_pick)
+	# Map picker — the admin's choice is sent to the server on Start.
+	_map_pick.clear()
+	for id in NetGame.MAPS:
+		_map_pick.add_item(NetGame.MAPS[id]["label"])
+		_map_pick.set_item_metadata(_map_pick.item_count - 1, id)
+		if id == NetSession.selected_map:
+			_map_pick.select(_map_pick.item_count - 1)
+	_map_pick.item_selected.connect(_on_map_pick)
 	_start.pressed.connect(func (): NetSession.request_start())
 	_seeker_pick.item_selected.connect(_on_seeker_pick)
 	_copy_btn.pressed.connect(_on_copy)
@@ -53,6 +68,10 @@ func _refresh() -> void:
 	var admin := NetSession.is_admin()
 	_start.visible = admin
 	_waiting.visible = not admin
+	_game_mode_pick.visible = admin  # only the admin chooses the mode + map
+	_map_pick.visible = admin
+	var gm_names := ["Normal", "Infection", "Double seeker"]
+	_mode.text = "Game mode:  %s" % gm_names[clampi(NetSession.game_mode, 0, 2)]
 	if NetSession.dedicated:
 		_code.text = "Dedicated server" + ("  —  you're the admin" if admin else "")
 		_copy_btn.visible = false
@@ -95,3 +114,12 @@ func _refresh() -> void:
 func _on_seeker_pick(index: int) -> void:
 	NetSession.decided_seeker_id = _seeker_pick.get_item_id(index)
 	_refresh()
+
+
+func _on_game_mode_pick(index: int) -> void:
+	NetSession.game_mode = _game_mode_pick.get_item_id(index)
+	_refresh()
+
+
+func _on_map_pick(index: int) -> void:
+	NetSession.selected_map = _map_pick.get_item_metadata(index)

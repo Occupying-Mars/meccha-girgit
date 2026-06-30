@@ -130,11 +130,22 @@ func _configure_role() -> void:
 		_camera.transform.origin = Vector3.ZERO
 		_pitch_angle = 0.0
 		_pitch.rotation.x = 0.0
+		# Full-size collision + body. Also UNDOES the hider shrink when a caught
+		# hider is infected into a seeker mid-round (infection mode).
+		var fc := CapsuleShape3D.new()
+		fc.radius = 0.25
+		fc.height = 1.7
+		_collision.shape = fc
+		_collision.scale = Vector3.ONE
+		_collision.position.y = 0.85
+		_collision.disabled = false
+		body.scale = Vector3.ONE
 		# Shots should land on the VISIBLE painted body, so cast against the paint
 		# trimesh (matches the mesh, and works even while a hider is wall-stuck and
 		# their movement capsule is disabled) + the world. Exclude our own capsule
 		# AND body parts so we never shoot ourselves.
 		_muzzle.collision_mask = 1 | HiderBody.PAINT_LAYER
+		_muzzle.clear_exceptions()
 		_muzzle.add_exception(self)
 		for sb in _own_static_bodies():
 			_muzzle.add_exception(sb)
@@ -239,12 +250,16 @@ func _toggle_menu(menu) -> void:
 		_pose_menu.close()
 	_menu_open = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Stop the camera arm from zooming in on anything behind you while painting /
+	# posing — you need the full body in view to colour it. Restored on close.
+	_spring.collision_mask = 0
 	menu.open()
 
 
 func _on_menu_closed() -> void:
 	if not _paint_menu.visible and not _pose_menu.visible:
 		_menu_open = false
+		_spring.collision_mask = 1  # camera collides with the world again
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -498,6 +513,36 @@ func _apply_caught() -> void:
 	for part_name in body.part_names():
 		body.set_part_color(part_name, Color(0.9, 0.1, 0.1))
 	print("[net_player] caught: ", name)
+
+
+## Infection mode: convert a caught hider into a seeker (they join the hunt).
+## Runs on every peer (call_local) so the role swap — full size, FP camera, gun —
+## is seen by everyone. Host-validated, same as set_caught.
+@rpc("authority", "call_local", "reliable")
+func become_seeker() -> void:
+	var s := multiplayer.get_remote_sender_id()
+	if s != 1 and s != 0:
+		return
+	if role == Role.SEEKER:
+		return
+	role = Role.SEEKER
+	caught = false
+	remove_from_group("hider")
+	body.reset_to_blank()
+	body.apply_pose("stand", false)
+	_configure_role()  # full size, FP camera, shooting
+	if _is_mine:
+		if _paint_menu != null:
+			_paint_menu.queue_free()
+			_paint_menu = null
+		if _pose_menu != null:
+			_pose_menu.queue_free()
+			_pose_menu = null
+		_menu_open = false
+		if _seeker_hud == null:
+			_seeker_hud = SEEKER_HUD.instantiate()
+			add_child(_seeker_hud)
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 ## Host-only: push this avatar's full current state to a late joiner so it

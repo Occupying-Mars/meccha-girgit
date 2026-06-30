@@ -41,8 +41,9 @@ func _ready() -> void:
 			_auto_join(s.substr("--joinserver=".length()))
 			return
 	_mode.clear()
-	_mode.add_item("Random seeker", NetSession.Mode.RANDOM)
-	_mode.add_item("Decided seeker", NetSession.Mode.DECIDED)
+	_mode.add_item("Normal", 0)         # caught hiders are out
+	_mode.add_item("Infection", 1)      # caught hiders turn seeker
+	_mode.add_item("Double seeker", 2)  # two seekers (needs 3+ players)
 	_map.clear()
 	for id in NetGame.MAPS:
 		_map.add_item(NetGame.MAPS[id]["label"])
@@ -165,8 +166,9 @@ func _on_host() -> void:
 	NetSession.prep_seconds = _hide_spin.value
 	NetSession.seek_seconds = _seek_spin.value
 	NetSession.selected_map = _map.get_item_metadata(_map.selected)
+	NetSession.game_mode = _mode.get_selected_id()  # 0 Normal · 1 Infection · 2 Double
 	_set_busy("Connecting to relay…" if _online.button_pressed else "Hosting…")
-	var err: int = await NetSession.host_game(_username.text, _mode.get_selected_id(), _online.button_pressed)
+	var err: int = await NetSession.host_game(_username.text, NetSession.Mode.RANDOM, _online.button_pressed)
 	if err != OK:
 		_set_error("Could not host (%s)." % error_string(err))
 		return

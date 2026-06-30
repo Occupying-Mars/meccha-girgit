@@ -40,7 +40,11 @@ var admin_id: int = 1   # who controls the lobby (host=1 on LAN; first client wh
 var username: String = "Player"
 var mode: int = Mode.RANDOM
 var decided_seeker_id: int = 1
-var seeker_id: int = 1
+## Game mode: 0 = Normal (caught hiders are out), 1 = Infection (caught hiders
+## turn seeker), 2 = Double (two seekers). Set by the host, replicated at start.
+var game_mode: int = 0
+## Who starts as seeker (1+ ids). Generalised from a single seeker for Double.
+var seeker_ids: Array = []
 ## Map the host picked; replicated to everyone at match start so all players
 ## load the SAME arena. Keys must match NetGame.MAPS ("sponza" / "arena").
 var selected_map: String = "sponza"
@@ -441,12 +445,15 @@ func request_start() -> void:
 	if multiplayer.is_server():
 		start_game()
 	else:
-		_server_start.rpc_id(1)
+		# Hand the admin's lobby picks (game mode + map) to the server.
+		_server_start.rpc_id(1, game_mode, selected_map)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _server_start() -> void:
+func _server_start(gmode: int, map_id: String) -> void:
 	if multiplayer.is_server() and dedicated and multiplayer.get_remote_sender_id() == admin_id:
+		game_mode = gmode
+		selected_map = map_id
 		start_game()
 
 
@@ -458,25 +465,30 @@ func start_game() -> void:
 	var ids := players.keys()
 	if ids.is_empty():
 		return
-	var sid := decided_seeker_id if mode == Mode.DECIDED else int(ids[randi() % ids.size()])
-	# sid == 0 means "nobody seeks" (everyone hides) — keep it; only fix
-	# genuinely invalid non-zero ids.
-	if sid != 0 and not players.has(sid):
-		sid = int(ids[0])
-	_begin.rpc(sid, selected_map)
-	_begin(sid, selected_map)  # host runs it too
+	var sids: Array = []
+	if mode == Mode.DECIDED and players.has(decided_seeker_id):
+		sids = [decided_seeker_id]
+	else:
+		# Double needs 3+ players (else it'd leave nobody hiding); otherwise 1.
+		var want := 2 if game_mode == 2 and ids.size() >= 3 else 1
+		var pool: Array = ids.duplicate()
+		pool.shuffle()
+		sids = pool.slice(0, want)
+	_begin.rpc(sids, selected_map, game_mode)
+	_begin(sids, selected_map, game_mode)  # host runs it too
 
 
 @rpc("authority", "call_remote", "reliable")
-func _begin(sid: int, map_id: String) -> void:
-	seeker_id = sid
+func _begin(sids: Array, map_id: String, gmode: int) -> void:
+	seeker_ids = sids
 	selected_map = map_id  # everyone builds the host's chosen map
+	game_mode = gmode
 	started.emit()
 
 
 func role_for(id: int) -> int:
 	# 0 = HIDER, 1 = SEEKER (matches NetPlayer.Role).
-	return 1 if id == seeker_id else 0
+	return 1 if id in seeker_ids else 0
 
 
 ## Client: connect straight to a dedicated server by IP:port (the most
