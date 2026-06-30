@@ -517,8 +517,11 @@ func _apply_caught() -> void:
 
 ## Infection mode: convert a caught hider into a seeker (they join the hunt).
 ## Runs on every peer (call_local) so the role swap — full size, FP camera, gun —
-## is seen by everyone. Host-validated, same as set_caught.
-@rpc("authority", "call_local", "reliable")
+## is seen by everyone. Host-validated via the sender check — must be "any_peer"
+## (NOT "authority") because the SERVER triggers this on a hider node it is not
+## the authority of; an "authority" annotation makes Godot drop the call and the
+## hider never converts (the "hunter can't kill in Infection" bug).
+@rpc("any_peer", "call_local", "reliable")
 func become_seeker() -> void:
 	var s := multiplayer.get_remote_sender_id()
 	if s != 1 and s != 0:
