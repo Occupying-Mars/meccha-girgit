@@ -363,42 +363,19 @@ func _pictures(rx: int, rz: int, solid: Array, rng: RandomNumberGenerator) -> vo
 
 
 func _ceiling_light(cx: float, cz: float) -> void:
-	# Bright, fairly neutral ceiling light + a soft fill + a visible glowing panel
-	# fixture, for the bright, evenly-lit look of a real room (not a moody spot).
+	# A downward spotlight from the ceiling — a real pool of warm light that
+	# casts shadows under the furniture.
 	var sl := SpotLight3D.new()
-	sl.position = Vector3(_x(cx), WALL_H - 0.2, _z(cz))
+	sl.position = Vector3(_x(cx), WALL_H - 0.25, _z(cz))
 	sl.rotation_degrees = Vector3(-90, 0, 0)
-	sl.light_color = Color(1.0, 0.97, 0.92)
-	sl.light_energy = 12.0
-	sl.spot_range = WALL_H + 4.0
-	sl.spot_angle = 72.0
-	sl.spot_angle_attenuation = 0.3
+	sl.light_color = Color(1.0, 0.92, 0.80)
+	sl.light_energy = 9.0
+	sl.spot_range = WALL_H + 3.5
+	sl.spot_angle = 66.0
+	sl.spot_angle_attenuation = 0.4
 	sl.shadow_enabled = true
-	sl.shadow_bias = 0.04
+	sl.shadow_bias = 0.05
 	add_child(sl)
-	# Soft fill so corners read (even brightness), shadow-free + cheap.
-	var fill := OmniLight3D.new()
-	fill.position = Vector3(_x(cx), WALL_H - 0.7, _z(cz))
-	fill.light_color = Color(1.0, 0.98, 0.95)
-	fill.light_energy = 1.7
-	fill.omni_range = ROOM * 1.1
-	fill.omni_attenuation = 1.0
-	add_child(fill)
-	# Visible glowing light-panel fixture on the ceiling.
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(2.6, 0.12, 2.6)
-	var em := StandardMaterial3D.new()
-	em.albedo_color = Color(1.0, 1.0, 0.97)
-	em.emission_enabled = true
-	em.emission = Color(1.0, 0.98, 0.92)
-	em.emission_energy_multiplier = 3.0
-	bm.surface_set_material(0, em)
-	mi.mesh = bm
-	mi.position = Vector3(_x(cx), WALL_H - 0.06, _z(cz))
-	mi.layers = MINIMAP_HIDE_LAYER
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
 
 
 # --- placement primitives ---
