@@ -412,11 +412,8 @@ func _on_phase_changed(phase: int) -> void:
 func _dedicated_reset_after(delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
 	if GameState.phase != GameState.Phase.RESULTS:
-		return  # something already moved us on
-	for p in _players.get_children():
-		p.queue_free()
-	_started = false
-	GameState.set_phase(GameState.Phase.ASSIGN)
+		return  # something already moved us on (e.g. the lobby emptied out)
+	_reset_to_lobby()
 	print("[dedicated] round over — back to lobby")
 
 
@@ -427,10 +424,27 @@ func _sync_phase(phase: int, time_left: float) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
-	if multiplayer.is_server():
-		var n := _players.get_node_or_null(str(id))
-		if n != null:
-			n.queue_free()
+	if not multiplayer.is_server():
+		return
+	var n := _players.get_node_or_null(str(id))
+	if n != null:
+		n.queue_free()
+	# Dedicated server, empty now: reset to a fresh lobby immediately instead of
+	# leaving the round (PREP/SEEK/RESULTS) running for nobody — the next people
+	# to connect must land in a clean ASSIGN lobby, not a stale/empty session.
+	if NetSession.dedicated and NetSession.players.is_empty():
+		_reset_to_lobby()
+
+
+## Wipe any leftover avatars and drop to ASSIGN. Used both when the round ends
+## (via _dedicated_reset_after) and immediately when the lobby empties out.
+func _reset_to_lobby() -> void:
+	for p in _players.get_children():
+		p.queue_free()
+	_started = false
+	if GameState.phase != GameState.Phase.ASSIGN:
+		GameState.set_phase(GameState.Phase.ASSIGN)
+	print("[dedicated] lobby empty — reset to ASSIGN")
 
 
 func _add_player(id: int) -> void:
