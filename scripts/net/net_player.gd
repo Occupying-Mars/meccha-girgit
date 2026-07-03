@@ -67,6 +67,9 @@ var caught: bool = false
 var _stuck: bool = false
 var _wall_normal: Vector3 = Vector3.ZERO
 var _stick_y: float = 0.0   # body height when we latched on (climb is relative to this)
+## Manual camera-arm obstruction handling (see _update_camera_arm).
+var _arm_max: float = 0.0   # full third-person arm length for this role
+var _cam_dist: float = 0.0  # smoothed current arm length
 ## Hider score, accrued by the host while this hider is visible to a seeker
 ## and close (hiding in plain sight). Broadcast to all at RESULTS.
 var score: float = 0.0
@@ -102,6 +105,12 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	_is_mine = is_multiplayer_authority()
 	_camera.current = _is_mine
+	# Camera obstruction is handled MANUALLY (see _update_camera_arm): the
+	# SpringArm's built-in collision snaps the camera instantly whenever the
+	# obstruction changes — e.g. the frame a jump clears the couch behind you —
+	# which reads as a sudden zoom glitch. We cast ourselves and smooth instead:
+	# snap IN instantly (never clip into walls), ease OUT gently.
+	_spring.collision_mask = 0
 	_configure_role()
 	if _is_mine:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -127,6 +136,8 @@ func _configure_role() -> void:
 	if is_seeker():
 		move_speed = SEEKER_SPEED
 		_spring.spring_length = 0.0
+		_arm_max = 0.0
+		_cam_dist = 0.0
 		_yaw.position.y = 1.6
 		_camera.transform.origin = Vector3.ZERO
 		_pitch_angle = 0.0
@@ -165,6 +176,8 @@ func _configure_role() -> void:
 		_collision.position.y = 0.85 * HIDER_SCALE
 		_yaw.position.y = 1.4 * HIDER_SCALE + 0.15
 		_spring.spring_length = 1.4
+		_arm_max = 1.4
+		_cam_dist = 1.4
 
 
 func _debug_remote_loop() -> void:
@@ -251,16 +264,14 @@ func _toggle_menu(menu) -> void:
 		_pose_menu.close()
 	_menu_open = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	# Stop the camera arm from zooming in on anything behind you while painting /
-	# posing — you need the full body in view to colour it. Restored on close.
-	_spring.collision_mask = 0
+	# While painting/posing the camera ignores obstructions (you need the full
+	# body in view) — _update_camera_arm checks _menu_open for this.
 	menu.open()
 
 
 func _on_menu_closed() -> void:
 	if not _paint_menu.visible and not _pose_menu.visible:
 		_menu_open = false
-		_spring.collision_mask = 1  # camera collides with the world again
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -279,6 +290,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if not _is_mine:
 		return  # remote: position/rotation come from the synchronizer
+	_update_camera_arm(delta)
 	if _menu_open or _pause_open or caught or not _can_act():
 		velocity.x = 0.0
 		velocity.z = 0.0
@@ -403,7 +415,35 @@ func _body_top() -> float:
 ## How high above the feet the orbiting camera can possibly reach (yaw pivot
 ## height + the full spring arm length + a small margin), regardless of pitch.
 func _camera_reach() -> float:
-	return _yaw.position.y + _spring.spring_length + 0.3
+	return _yaw.position.y + _arm_max + 0.3
+
+
+## Manual third-person camera obstruction with smoothing. The stock SpringArm3D
+## snaps the camera the instant its cast result changes — e.g. the frame a jump
+## clears the furniture behind you — which reads as a sudden zoom glitch.
+## Instead: cast our own ray back along the arm, snap IN instantly (the camera
+## must never clip inside a wall), but ease OUT smoothly when space opens up.
+## While a paint/pose menu is open, obstruction is ignored entirely (you need
+## the whole body in view to colour it).
+func _update_camera_arm(delta: float) -> void:
+	if _arm_max <= 0.0:
+		return  # first-person seeker
+	var target := _arm_max
+	if not _menu_open:
+		var space := get_world_3d().direct_space_state
+		var from := _spring.global_position
+		var dir := _spring.global_transform.basis.z.normalized()  # arm extends +Z
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * _arm_max)
+		q.exclude = [get_rid()]
+		q.collision_mask = 1
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty():
+			target = clampf(from.distance_to(hit["position"]) - 0.12, 0.25, _arm_max)
+	if target < _cam_dist:
+		_cam_dist = target  # zoom in instantly — never leave the camera in a wall
+	else:
+		_cam_dist = lerpf(_cam_dist, target, 1.0 - exp(-6.0 * delta))  # ease out
+	_spring.spring_length = _cam_dist
 
 
 ## Is the wall we're clung to still there at `check_y`? Checked at head height
