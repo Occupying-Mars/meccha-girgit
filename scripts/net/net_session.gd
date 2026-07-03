@@ -61,6 +61,22 @@ var host_oid: String = ""     # (client) the host's oid we're joining
 ## Relay server to use (host:port). Empty -> --noray CLI / default const.
 ## The public test relay is unreliable; point this at your own noray.
 var relay_address: String = ""
+
+## --- Direct internet hosting (no relay) --------------------------------------
+## Host from your own PC and let friends join over the internet with NO relay
+## server needed: we ask YOUR OWN router (via UPnP) to forward the one game
+## port and to tell us your public IP, then bake that into an invite code the
+## same way the LAN code works. Nothing is sent to any third party — the only
+## network call is the local UPnP control request to your own gateway. If a
+## router has UPnP disabled (common, and a fine default), hosting still works
+## for anyone on the same Wi-Fi/LAN; `direct_status` explains what happened so
+## the menu can tell the host plainly what to do next (forward the port
+## manually, or fall back to the Relay option, which needs no router changes).
+var direct: bool = false
+var direct_invite_code: String = ""
+var direct_public_ip: String = ""
+var direct_status: String = ""
+var _upnp: UPNP = null
 ## How long a client waits for the connection (NAT punch, then relay) to fully
 ## establish before giving up. We block on this so the menu never drops a player
 ## into the lobby while still disconnected ("stuck on Waiting for host").
@@ -107,13 +123,25 @@ func _netlog(msg: String) -> void:
 ## --- Connection -------------------------------------------------------------
 
 func host_game(uname: String, game_mode: int, want_online: bool = false) -> int:
+	online = want_online
+	if want_online:
+		username = _clean_name(uname)
+		mode = game_mode
+		is_host = true
+		decided_seeker_id = 1
+		return await _host_online()
+	return _host_lan(uname, game_mode)
+
+
+## Plain LAN hosting: a bare ENet server, invite code encodes your LOCAL IP so
+## only players on the same network can reach it. Shared by host_game() (LAN
+## branch) and host_direct() (which additionally UPnP-forwards + uses the
+## PUBLIC IP so it also works over the internet).
+func _host_lan(uname: String, game_mode: int) -> int:
 	username = _clean_name(uname)
 	mode = game_mode
 	is_host = true
 	decided_seeker_id = 1
-	online = want_online
-	if want_online:
-		return await _host_online()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(PORT, MAX_PLAYERS)
 	if err != OK:
@@ -123,6 +151,23 @@ func host_game(uname: String, game_mode: int, want_online: bool = false) -> int:
 	players = {1: username}
 	_connect_once(multiplayer.peer_disconnected, _on_peer_disconnected)
 	players_changed.emit()
+	return OK
+
+
+## Host from this PC so friends can join over the INTERNET with no relay: same
+## ENet server as LAN hosting, plus a best-effort UPnP port-forward + public-IP
+## lookup so the invite code works from anywhere. Always returns the LAN
+## hosting result (the match is playable immediately either way); check
+## `direct_status` / `direct_invite_code` after this returns for whether the
+## internet path came up, and show that to the host.
+func host_direct(uname: String, game_mode: int) -> int:
+	online = false
+	direct = true
+	var err := _host_lan(uname, game_mode)
+	if err != OK:
+		direct = false
+		return err
+	_try_upnp_forward()
 	return OK
 
 
@@ -148,6 +193,60 @@ func join_game(uname: String, code: String, want_online: bool = false) -> int:
 	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
 	_connect_once(multiplayer.server_disconnected, _reset)
 	return OK
+
+
+## --- Direct internet hosting: UPnP port-forward + public IP lookup ----------
+## Best-effort and self-contained: the only network call is to YOUR OWN
+## router's local UPnP control endpoint (discover() is a LAN broadcast; the
+## rest talk only to the gateway device it finds). No third-party "what's my
+## IP" service is ever contacted — if UPnP isn't available we say so plainly
+## instead of silently phoning out elsewhere. Blocking (per Godot's UPNP docs),
+## but bounded by the 2s discovery timeout, and only runs once at host time.
+func _try_upnp_forward() -> void:
+	direct_invite_code = ""
+	direct_public_ip = ""
+	direct_status = ""
+	_upnp = UPNP.new()
+	var disc: int = _upnp.discover(2000, 2, "InternetGatewayDevice")
+	if disc != UPNP.UPNP_RESULT_SUCCESS:
+		direct_status = ("No UPnP router found (this is a normal router setting, not an error). " +
+			"Friends on your Wi-Fi/LAN can still join with this code. For the internet, forward " +
+			"UDP port %d to this PC in your router settings, or use \"Relay\" hosting instead.") % PORT
+		return
+	var gw: UPNPDevice = _upnp.get_gateway()
+	if gw == null or not gw.is_valid_gateway():
+		direct_status = ("Found a router but it's not acting as an internet gateway. " +
+			"Use \"Relay\" hosting for internet play, or forward UDP %d manually.") % PORT
+		return
+	var map_err: int = _upnp.add_port_mapping(PORT, PORT, "MECCHA-GIRGIT", "UDP", 0)
+	var ext_ip: String = _upnp.query_external_address()
+	if ext_ip == "":
+		direct_status = ("Couldn't detect your public IP from the router. " +
+			"Use \"Relay\" hosting instead, or find your public IP yourself and forward UDP %d.") % PORT
+		return
+	direct_public_ip = ext_ip
+	direct_invite_code = _encode_ip_port(ext_ip, PORT)
+	if map_err == UPNP.UPNP_RESULT_SUCCESS:
+		direct_status = "Ready — friends can join from anywhere with this code."
+	else:
+		direct_status = ("Your router blocked automatic port-forwarding (code %d). If you forward " +
+			"UDP %d to this PC yourself, this code will work; otherwise use \"Relay\" hosting.") % [map_err, PORT]
+
+
+## Undo the port-forward so the router isn't left open once we stop hosting.
+func _upnp_unmap() -> void:
+	if _upnp != null:
+		_upnp.delete_port_mapping(PORT, "UDP")
+		_upnp = null
+	direct = false
+	direct_invite_code = ""
+	direct_public_ip = ""
+	direct_status = ""
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_CRASH:
+		_upnp_unmap()
 
 
 ## Raw "host" or "host:port" (a VPS IP) -> {ip, port}. {} if it's not an address.
@@ -369,9 +468,14 @@ func _hs_name(err: int) -> String:
 		_: return error_string(err)
 
 
-## Invite code: the relay OID online, or the encoded host IP on LAN.
+## Invite code: the relay OID online, the encoded PUBLIC IP for direct-internet
+## hosting (once UPnP has resolved it), or the encoded LOCAL IP on plain LAN.
 func invite_code() -> String:
-	return online_oid if online else make_invite()
+	if online:
+		return online_oid
+	if direct and direct_invite_code != "":
+		return direct_invite_code
+	return make_invite()
 
 
 func _on_connected_to_server() -> void:
@@ -559,12 +663,18 @@ func local_ip() -> String:
 	return "127.0.0.1"
 
 func make_invite() -> String:
-	var ip := local_ip()
+	return _encode_ip_port(local_ip(), PORT)
+
+
+## IPv4 "a.b.c.d" + port -> the 12-hex-char invite code (shared by the LAN
+## code, which encodes local_ip(), and the direct-internet code, which
+## encodes the public IP from _try_upnp_forward()).
+func _encode_ip_port(ip: String, port: int) -> String:
 	var parts := ip.split(".")
 	if parts.size() != 4:
 		return ""
 	var n := (int(parts[0]) << 24) | (int(parts[1]) << 16) | (int(parts[2]) << 8) | int(parts[3])
-	return "%08X%04X" % [n, PORT]
+	return "%08X%04X" % [n, port]
 
 func parse_invite(code: String) -> Dictionary:
 	var c := code.strip_edges().to_upper().replace("-", "")
@@ -583,6 +693,7 @@ func _reset() -> void:
 	admin_id = 1
 	players.clear()
 	multiplayer.multiplayer_peer = null
+	_upnp_unmap()
 
 
 ## Leave the current match and tear down networking (used by the results menu).
@@ -599,6 +710,7 @@ func leave() -> void:
 	host_oid = ""
 	players.clear()
 	GameState.authoritative = true
+	_upnp_unmap()
 
 
 func _clean_name(n: String) -> String:

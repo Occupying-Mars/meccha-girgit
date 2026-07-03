@@ -16,6 +16,7 @@ extends CanvasLayer
 @onready var _start: Button = $Panel/Margin/VBox/StartBtn
 @onready var _waiting: Label = $Panel/Margin/VBox/Waiting
 @onready var _copy_btn: Button = $Panel/Margin/VBox/CopyBtn
+@onready var _direct_status: Label = $Panel/Margin/VBox/DirectStatus
 
 var _syncing := false  # true while mirroring server-pushed settings (no re-push)
 
@@ -92,12 +93,19 @@ func _refresh() -> void:
 	if NetSession.dedicated:
 		_code.text = "Dedicated server" + ("  —  you're the admin" if admin else "")
 		_copy_btn.visible = false
+		_direct_status.visible = false
 	elif NetSession.is_host:
 		_code.text = "Invite code:  %s" % NetSession.invite_code()
 		_copy_btn.visible = true
+		# Direct-internet hosting: tell the host plainly whether the auto
+		# port-forward actually worked, so a friend outside their LAN knows
+		# whether the code will really reach them.
+		_direct_status.visible = NetSession.direct and NetSession.direct_status != ""
+		_direct_status.text = NetSession.direct_status
 	else:
 		_code.text = "Connected — waiting in lobby"
 		_copy_btn.visible = false
+		_direct_status.visible = false
 	_seeker_pick.visible = admin and NetSession.mode == NetSession.Mode.DECIDED and not NetSession.dedicated
 
 	for c in _list.get_children():

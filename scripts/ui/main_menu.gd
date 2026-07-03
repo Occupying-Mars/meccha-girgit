@@ -2,6 +2,12 @@ extends Control
 ## Title screen: username, host (with mode) or join (with invite code).
 
 const ROOT := "Center/Card/Margin/VBox"
+## How friends reach a peer-hosted game (irrelevant when "Use your own server"
+## is on — that always connects outbound to the configured dedicated server).
+## LAN: same Wi-Fi/network only. DIRECT: host's own PC, reachable over the
+## internet via a UPnP-forwarded port + public IP (no relay needed). RELAY:
+## routed through a Noray relay server (works even if UPnP is unavailable).
+enum HostVia { LAN, DIRECT, RELAY }
 
 @onready var _username: LineEdit = get_node(ROOT + "/UsernameRow/Username")
 @onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
@@ -10,7 +16,8 @@ const ROOT := "Center/Card/Margin/VBox"
 @onready var _map: OptionButton = get_node(ROOT + "/MapRow/Map")
 @onready var _server_ip: LineEdit = get_node(ROOT + "/ServerRow/ServerIP")
 @onready var _join_server_btn: Button = get_node(ROOT + "/JoinServerBtn")
-@onready var _online: CheckBox = get_node(ROOT + "/OnlineCheck")
+@onready var _host_via_row: HBoxContainer = get_node(ROOT + "/HostViaRow")
+@onready var _host_via: OptionButton = get_node(ROOT + "/HostViaRow/HostVia")
 @onready var _relay_row: HBoxContainer = get_node(ROOT + "/RelayRow")
 @onready var _relay: LineEdit = get_node(ROOT + "/RelayRow/Relay")
 @onready var _code: LineEdit = get_node(ROOT + "/JoinRow/Code")
@@ -52,7 +59,12 @@ func _ready() -> void:
 	_host_btn.pressed.connect(_on_host)
 	_join_btn.pressed.connect(_on_join)
 	_join_server_btn.pressed.connect(_on_join_server)
-	_online.toggled.connect(func (on): _relay_row.visible = on and _use_server.button_pressed == false)
+	_host_via.clear()
+	_host_via.add_item("Local network (LAN)", HostVia.LAN)
+	_host_via.add_item("Direct — auto port-forward (internet)", HostVia.DIRECT)
+	_host_via.add_item("Relay (Noray) — works anywhere", HostVia.RELAY)
+	_host_via.select(HostVia.DIRECT)  # best default: no relay to run/own, works over the internet
+	_host_via.item_selected.connect(_on_host_via_selected)
 	# Server vs peer-host. A configured DEFAULT_SERVER (your VPS) pre-fills the
 	# field and defaults "Use your own server" on; open-source builds (empty)
 	# default to peer hosting with invite codes.
@@ -122,7 +134,7 @@ func _on_use_server_toggled(on: bool) -> void:
 	_join_server_btn.visible = on
 	_mode_row.visible = not on
 	_map_row.visible = not on
-	_online.visible = not on
+	_host_via_row.visible = not on
 	_host_btn.visible = not on
 	_sep.visible = not on
 	_join_row.visible = not on
@@ -130,7 +142,11 @@ func _on_use_server_toggled(on: bool) -> void:
 	# Tucked away to declutter — sensible defaults (45s hide / 120s seek) and the
 	# relay address from config are used unless the player opens "More options".
 	_timer_row.visible = _advanced.button_pressed and not on
-	_relay_row.visible = _advanced.button_pressed and not on and _online.button_pressed
+	_relay_row.visible = _advanced.button_pressed and not on and _host_via.selected == HostVia.RELAY
+
+
+func _on_host_via_selected(_index: int) -> void:
+	_relay_row.visible = _advanced.button_pressed and _host_via.selected == HostVia.RELAY
 
 
 func _on_join_server() -> void:
@@ -162,13 +178,23 @@ func _auto_join(addr: String) -> void:
 
 
 func _on_host() -> void:
-	NetSession.relay_address = _relay.text if _online.button_pressed else ""
+	var via := _host_via.selected
+	NetSession.relay_address = _relay.text if via == HostVia.RELAY else ""
 	NetSession.prep_seconds = _hide_spin.value
 	NetSession.seek_seconds = _seek_spin.value
 	NetSession.selected_map = _map.get_item_metadata(_map.selected)
 	NetSession.game_mode = _mode.get_selected_id()  # 0 Normal · 1 Infection · 2 Double
-	_set_busy("Connecting to relay…" if _online.button_pressed else "Hosting…")
-	var err: int = await NetSession.host_game(_username.text, NetSession.Mode.RANDOM, _online.button_pressed)
+	var err: int
+	match via:
+		HostVia.RELAY:
+			_set_busy("Connecting to relay…")
+			err = await NetSession.host_game(_username.text, NetSession.Mode.RANDOM, true)
+		HostVia.DIRECT:
+			_set_busy("Hosting… checking your router for internet access…")
+			err = NetSession.host_direct(_username.text, NetSession.Mode.RANDOM)
+		_:
+			_set_busy("Hosting…")
+			err = await NetSession.host_game(_username.text, NetSession.Mode.RANDOM, false)
 	if err != OK:
 		_set_error("Could not host (%s)." % error_string(err))
 		return
@@ -176,9 +202,12 @@ func _on_host() -> void:
 
 
 func _on_join() -> void:
-	NetSession.relay_address = _relay.text if _online.button_pressed else ""
+	var via_relay := _host_via.selected == HostVia.RELAY
+	NetSession.relay_address = _relay.text if via_relay else ""
 	_set_busy("Connecting…")
-	var err: int = await NetSession.join_game(_username.text, _code.text, _online.button_pressed)
+	# LAN and DIRECT joins are identical on the client side — both are just an
+	# outbound connect to an ip:port decoded from the invite code.
+	var err: int = await NetSession.join_game(_username.text, _code.text, via_relay)
 	if err != OK:
 		_set_error("Bad invite code or connection failed (%s)." % error_string(err))
 		return

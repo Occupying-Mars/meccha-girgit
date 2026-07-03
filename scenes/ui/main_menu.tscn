@@ -206,10 +206,18 @@ min_value = 10.0
 max_value = 600.0
 value = 120.0
 
-[node name="OnlineCheck" type="CheckBox" parent="Center/Card/Margin/VBox"]
+[node name="HostViaRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 layout_mode = 2
-button_pressed = true
-text = "Play over internet (relay)"
+theme_override_constants/separation = 10
+
+[node name="Label" type="Label" parent="Center/Card/Margin/VBox/HostViaRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Friends via"
+
+[node name="HostVia" type="OptionButton" parent="Center/Card/Margin/VBox/HostViaRow"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="RelayRow" type="HBoxContainer" parent="Center/Card/Margin/VBox"]
 visible = true
