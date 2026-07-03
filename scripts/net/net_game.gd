@@ -85,15 +85,21 @@ func _ready() -> void:
 	# Custom spawn function runs on every peer with the same data, so initial
 	# position + role are set deterministically (no spawn-vs-sync race).
 	_spawner.spawn_function = _spawn_player
+	# Graphics toggle (pause menu) re-applies the lighting stack live.
+	GameState.graphics_changed.connect(func ():
+		if not _last_light_info.is_empty():
+			_apply_lighting(_last_light_info))
 	if "--dedicated" in OS.get_cmdline_user_args():
 		_start_dedicated_server()
 	elif NetSession.active:
 		_start_session_mode()
 		_add_minimap()
+		_add_scoreboard()
 	else:
 		_build_map.call_deferred(_cli_map())  # CLI: --map=NAME (default arena)
 		_start_cli_mode()
 		_add_minimap()
+		_add_scoreboard()
 
 
 func _add_minimap() -> void:
@@ -102,6 +108,14 @@ func _add_minimap() -> void:
 	var mm: CanvasLayer = load("res://scripts/ui/minimap.gd").new()
 	mm.setup(_players)
 	add_child(mm)
+
+
+func _add_scoreboard() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var sb: CanvasLayer = load("res://scripts/ui/scoreboard.gd").new()
+	sb.setup(_players)
+	add_child(sb)
 
 
 func _cli_map() -> String:
@@ -178,8 +192,11 @@ func _build_map(map_id: String) -> void:
 	print("[net] built map: ", map_id)
 
 
+var _last_light_info: Dictionary = {}
+
 func _apply_lighting(info: Dictionary) -> void:
 	# Per-map lighting so Sponza is bright while the dungeon stays dark/moody.
+	_last_light_info = info  # kept so the graphics toggle can re-apply live
 	var env: Environment = _world_env.environment
 	if info.get("dark_bg", false):
 		# Dark indoor look — no bright sky, ambient from a dim color so hiders
@@ -214,12 +231,14 @@ func _apply_lighting(info: Dictionary) -> void:
 ## ~0.5 deg angular size), a NEUTRAL grade (no baked contrast/saturation push),
 ## and SSAO relaxed to a supporting role now that GI does the true occlusion.
 func _apply_quality(env: Environment, info: Dictionary) -> void:
+	var high := GameState.graphics_high
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_white = 1.4
-	# Real-time global illumination: light bounces off floors/walls, corners
-	# darken naturally, colour bleeds subtly between surfaces. The constant
-	# ambient drops to a fraction — GI replaces the fake uniform fill.
-	env.sdfgi_enabled = info.get("gi", true)
+	# Real-time global illumination (HIGH only — it's the GPU-heavy part):
+	# light bounces off floors/walls, corners darken naturally, colour bleeds
+	# subtly between surfaces. The constant ambient drops to a fraction — GI
+	# replaces the fake uniform fill. LOW keeps the full ambient instead.
+	env.sdfgi_enabled = high and info.get("gi", true)
 	env.sdfgi_use_occlusion = true
 	env.sdfgi_bounce_feedback = 0.4
 	env.sdfgi_cascades = 4
@@ -227,15 +246,16 @@ func _apply_quality(env: Environment, info: Dictionary) -> void:
 	env.sdfgi_energy = 1.1
 	if env.sdfgi_enabled:
 		env.ambient_light_energy *= 0.25
-	# Screen-space reflections ground objects on semi-glossy floors.
-	env.ssr_enabled = true
+	# Screen-space reflections ground objects on semi-glossy floors (HIGH only).
+	env.ssr_enabled = high
 	env.ssr_max_steps = 56
 	env.ssr_fade_in = 0.15
 	env.ssr_fade_out = 2.0
 	env.ssr_depth_tolerance = 0.4
+	# On LOW, SSAO works a little harder since there's no GI doing occlusion.
 	env.ssao_enabled = true
 	env.ssao_radius = 1.4
-	env.ssao_intensity = 1.4
+	env.ssao_intensity = 1.4 if high else 1.9
 	env.ssao_power = 1.5
 	env.ssao_detail = 0.6
 	env.ssil_enabled = info.get("ssil", false)

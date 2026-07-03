@@ -10,6 +10,7 @@ extends Node
 
 signal phase_changed(new_phase: int)
 signal phase_tick(seconds_left: float)
+signal graphics_changed
 
 enum Phase { ASSIGN, PREP, SEEK, RESULTS }
 enum Mode { NORMAL, INFECTION, DOUBLE }
@@ -19,11 +20,32 @@ enum Mode { NORMAL, INFECTION, DOUBLE }
 
 var mode: int = Mode.NORMAL
 var phase: int = Phase.ASSIGN
+## Graphics quality: HIGH = full realism stack (SDFGI global illumination,
+## SSR reflections — GPU-heavy), LOW = the cheap stack for weaker machines.
+## Persisted to user://settings.cfg; net_game re-applies on change.
+var graphics_high: bool = true
 ## Host (or single-player) advances phases; clients only tick the display and
 ## apply host-broadcast phase changes via sync_phase().
 var authoritative: bool = true
 var _time_left: float = 0.0
 var _running: bool = false
+
+
+func _ready() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://settings.cfg") == OK:
+		graphics_high = cfg.get_value("video", "graphics_high", true)
+
+
+func set_graphics_high(high: bool) -> void:
+	if graphics_high == high:
+		return
+	graphics_high = high
+	var cfg := ConfigFile.new()
+	cfg.load("user://settings.cfg")  # keep any other sections if present
+	cfg.set_value("video", "graphics_high", high)
+	cfg.save("user://settings.cfg")
+	graphics_changed.emit()
 
 
 func _unhandled_input(event: InputEvent) -> void:

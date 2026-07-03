@@ -48,6 +48,11 @@ custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
 text = "RESUME"
 
+[node name="Graphics" type="Button" parent="Center/Card/Margin/VBox"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "GRAPHICS: HIGH"
+
 [node name="Leave" type="Button" parent="Center/Card/Margin/VBox"]
 custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
