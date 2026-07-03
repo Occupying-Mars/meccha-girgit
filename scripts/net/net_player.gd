@@ -66,6 +66,7 @@ var _pause_open: bool = false
 var caught: bool = false
 var _stuck: bool = false
 var _wall_normal: Vector3 = Vector3.ZERO
+var _stick_y: float = 0.0   # body height when we latched on (climb is relative to this)
 ## Hider score, accrued by the host while this hider is visible to a seeker
 ## and close (hiding in plain sight). Broadcast to all at RESULTS.
 var score: float = 0.0
@@ -338,6 +339,7 @@ func _try_stick() -> void:
 	# Snap so the (un-squeezed) model sits against the wall, keep height.
 	var p := best["position"] as Vector3
 	global_position = Vector3(p.x, global_position.y, p.z) + _wall_normal * WALL_OFFSET
+	_stick_y = global_position.y
 	# Face out from the wall; the model keeps its current pose (no squeezing).
 	body.rotation.y = atan2(_wall_normal.x, _wall_normal.z)
 	velocity = Vector3.ZERO
@@ -350,14 +352,35 @@ func _try_stick() -> void:
 
 
 func _wall_adjust(delta: float) -> void:
-	# Stuck: only raise/lower to line up with a frame/shelf edge (no climbing).
+	# Stuck: raise/lower to line up with a frame/shelf edge. This is a small
+	# ADJUSTMENT, not free-climbing — you cannot rise above the wall you're on
+	# (that let players climb over walls and roam on top of / outside the map).
 	var v := 0.0
 	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
 		v += 1.0
 	if Input.is_action_pressed("move_back"):
 		v -= 1.0
 	velocity = Vector3.ZERO
-	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, 6.0)
+	# Block upward motion once the wall no longer extends above us (reached its
+	# top), so the body can never get over the wall.
+	if v > 0.0 and not _wall_present_at(global_position.y + 1.0):
+		v = 0.0
+	# Also cap the total travel near where we latched on — a shelf-lineup nudge,
+	# not a ladder — as a belt-and-suspenders bound on any map.
+	var lo := maxf(0.1, _stick_y - 2.5)
+	var hi := _stick_y + 2.5
+	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, lo, hi)
+
+
+## Is the wall we're clung to still there at `check_y`? Used to stop a climb at
+## the wall's top so nobody can rise over it.
+func _wall_present_at(check_y: float) -> bool:
+	var space := get_world_3d().direct_space_state
+	var from := Vector3(global_position.x, check_y, global_position.z)
+	var q := PhysicsRayQueryParameters3D.create(from, from - _wall_normal * (WALL_OFFSET + 0.6))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	return not space.intersect_ray(q).is_empty()
 
 
 func _unstick() -> void:
@@ -371,6 +394,53 @@ func _unstick() -> void:
 	body.rotation.y = 0.0
 	body.apply_pose("stand", false)
 	_broadcast_pose("stand")
+
+
+## If a full standing capsule at our position overlaps geometry, move to the
+## nearest clear spot (never through a wall) so a converted seeker is never
+## trapped. Authority-peer only — we own this avatar's position here.
+func _unwedge_to_clear() -> void:
+	var space := get_world_3d().direct_space_state
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.28
+	shape.height = 1.7
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	if _capsule_free(space, q, global_position):
+		return
+	# Straight up first (space above a small hiding spot is usually open)...
+	for lift in [0.4, 0.9, 1.5]:
+		if _capsule_free(space, q, global_position + Vector3(0, lift, 0)):
+			global_position += Vector3(0, lift, 0)
+			velocity = Vector3.ZERO
+			return
+	# ...then spiral outward at the current height, staying in this room.
+	for ring in [0.6, 1.0, 1.5, 2.2, 3.0]:
+		for step in 12:
+			var a := TAU * float(step) / 12.0
+			var p := global_position + Vector3(cos(a) * ring, 0.0, sin(a) * ring)
+			if _capsule_free(space, q, p) and not _wall_between(global_position, p):
+				global_position = p
+				velocity = Vector3.ZERO
+				return
+
+
+func _capsule_free(space: PhysicsDirectSpaceState3D, q: PhysicsShapeQueryParameters3D, pos: Vector3) -> bool:
+	q.transform = Transform3D(Basis(), pos + Vector3(0, 0.9, 0))
+	return space.intersect_shape(q, 1).is_empty()
+
+
+## Solid wall between a and b? High ray (above furniture) so it only trips on
+## walls — stops the un-wedge nudge from popping someone into another room/outside.
+func _wall_between(a: Vector3, b: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	var y := a.y + 1.5
+	var q := PhysicsRayQueryParameters3D.create(Vector3(a.x, y, a.z), Vector3(b.x, y, b.z))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	return not space.intersect_ray(q).is_empty()
 
 
 ## --- Paint / pose replication (RPC, reliable, on lock-in) --------------------
@@ -531,10 +601,18 @@ func become_seeker() -> void:
 	role = Role.SEEKER
 	caught = false
 	remove_from_group("hider")
+	# A wall-stuck hider had its capsule disabled — drop the stuck state so the
+	# newly full-size seeker collides + moves normally again.
+	_stuck = false
+	_wall_normal = Vector3.ZERO
 	body.reset_to_blank()
 	body.apply_pose("stand", false)
 	_configure_role()  # full size, FP camera, shooting
 	if _is_mine:
+		# The tiny hider just grew to a full seeker capsule; if that happened in a
+		# cramped hiding spot they'd be wedged in geometry. Pop them to the nearest
+		# clear standing spot so they never get trapped on conversion.
+		_unwedge_to_clear()
 		if _paint_menu != null:
 			_paint_menu.queue_free()
 			_paint_menu = null
