@@ -352,28 +352,24 @@ func _try_stick() -> void:
 
 
 func _wall_adjust(delta: float) -> void:
-	# Stuck: raise/lower to line up with a frame/shelf edge. This is a small
-	# ADJUSTMENT, not free-climbing — you cannot rise above the wall you're on
-	# (that let players climb over walls and roam on top of / outside the map).
+	# Climb freely UP the wall face — the whole wall is fair game. The ONLY limit
+	# is that you can't rise once the wall no longer extends just above your feet
+	# (you've reached its top), so you can never climb OVER a wall and out of the
+	# map. A generous per-latch cap is just a runaway guard.
 	var v := 0.0
 	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
 		v += 1.0
 	if Input.is_action_pressed("move_back"):
 		v -= 1.0
 	velocity = Vector3.ZERO
-	# Block upward motion once the wall no longer extends above us (reached its
-	# top), so the body can never get over the wall.
-	if v > 0.0 and not _wall_present_at(global_position.y + 1.0):
+	if v > 0.0 and not _wall_present_at(global_position.y + 0.1):
 		v = 0.0
-	# Also cap the total travel near where we latched on — a shelf-lineup nudge,
-	# not a ladder — as a belt-and-suspenders bound on any map.
-	var lo := maxf(0.1, _stick_y - 2.5)
-	var hi := _stick_y + 2.5
-	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, lo, hi)
+	var hi := _stick_y + 6.0
+	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, hi)
 
 
-## Is the wall we're clung to still there at `check_y`? Used to stop a climb at
-## the wall's top so nobody can rise over it.
+## Is the wall we're clung to still there just above the feet? A tiny lookahead
+## (0.1) means you can climb the whole wall and stop only at its very top.
 func _wall_present_at(check_y: float) -> bool:
 	var space := get_world_3d().direct_space_state
 	var from := Vector3(global_position.x, check_y, global_position.z)
