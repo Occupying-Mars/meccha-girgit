@@ -66,10 +66,12 @@ func _ready() -> void:
 	_host_via.select(HostVia.DIRECT)  # best default: no relay to run/own, works over the internet
 	_host_via.item_selected.connect(_on_host_via_selected)
 	# Server vs peer-host. A configured DEFAULT_SERVER (your VPS) pre-fills the
-	# field and defaults "Use your own server" on; open-source builds (empty)
-	# default to peer hosting with invite codes.
+	# field for convenience, but the checkbox always STARTS UNCHECKED — the
+	# peer-hosting controls (mode/map/"Friends via"/Host) show by default, and
+	# connecting to a dedicated server is an explicit opt-in click, not a
+	# surprise default that hides the hosting UI.
 	_server_ip.text = NetSession.DEFAULT_SERVER
-	_use_server.button_pressed = NetSession.DEFAULT_SERVER.strip_edges() != ""
+	_use_server.button_pressed = false
 	_use_server.toggled.connect(_on_use_server_toggled)
 	# "More options" reveals the host timers + relay override (off by default).
 	_advanced = CheckBox.new()
