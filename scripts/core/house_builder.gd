@@ -364,15 +364,18 @@ func _pictures(rx: int, rz: int, solid: Array, rng: RandomNumberGenerator) -> vo
 
 func _ceiling_light(cx: float, cz: float) -> void:
 	# A downward spotlight from the ceiling — a real pool of warm light that
-	# casts shadows under the furniture.
+	# casts shadows under the furniture. Physical-ish distance falloff
+	# (attenuation > 1) and slightly relaxed energy: with SDFGI on, the bounce
+	# adds the fill that used to need brute-force direct light.
 	var sl := SpotLight3D.new()
 	sl.position = Vector3(_x(cx), WALL_H - 0.25, _z(cz))
 	sl.rotation_degrees = Vector3(-90, 0, 0)
-	sl.light_color = Color(1.0, 0.92, 0.80)
-	sl.light_energy = 9.0
+	sl.light_color = Color(1.0, 0.94, 0.86)
+	sl.light_energy = 7.5
 	sl.spot_range = WALL_H + 3.5
 	sl.spot_angle = 66.0
 	sl.spot_angle_attenuation = 0.4
+	sl.spot_attenuation = 1.4
 	sl.shadow_enabled = true
 	sl.shadow_bias = 0.05
 	add_child(sl)
@@ -438,10 +441,13 @@ func _wall_mat() -> StandardMaterial3D:
 
 
 func _ceil_mat() -> StandardMaterial3D:
+	# Textured plaster (near-white tint) instead of a flat untextured colour —
+	# the ceiling is a huge part of every indoor frame, and a surface with real
+	# normal/roughness response catches bounced light instead of reading as a
+	# dead grey plane.
 	if _ceil_material == null:
-		_ceil_material = StandardMaterial3D.new()
-		_ceil_material.albedo_color = CEIL_COLOR
-		_ceil_material.roughness = 1.0
+		_ceil_material = _pbr("wall", 0.96, 0.8)
+		_ceil_material.albedo_color = Color(0.93, 0.93, 0.91)
 	return _ceil_material
 
 
