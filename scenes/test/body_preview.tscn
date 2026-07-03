@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://q0bodypreview0"]
+
+[ext_resource type="Script" path="res://scripts/dev/body_preview.gd" id="1_bp"]
+
+[node name="BodyPreview" type="Node3D"]
+script = ExtResource("1_bp")

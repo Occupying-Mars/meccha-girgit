@@ -212,7 +212,7 @@ func _paint_at(screen_pos: Vector2) -> void:
 	var collider: Object = hit.get("collider")
 	if collider is Node:
 		var part := (collider as Node).get_parent().name
-		body.paint_at(String(part), hit["position"], color, brush)
+		body.paint_at(String(part), hit["position"], color, brush, hit.get("face_index", -1))
 
 
 # ---------------------------------------------------------------------------

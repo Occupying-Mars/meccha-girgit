@@ -561,12 +561,13 @@ func _drive_walk(delta: float) -> void:
 		_walk_last = p
 		_walk_init = true
 	var horiz := Vector2(p.x - _walk_last.x, p.z - _walk_last.z)
+	var vy := (p.y - _walk_last.y) / maxf(delta, 0.0001)  # jump/fall -> leg tuck
 	_walk_last = p
 	var speed := horiz.length() / maxf(delta, 0.0001)
 	var target := clampf(speed / maxf(move_speed, 0.1), 0.0, 1.0)
 	_walk_amount = lerpf(_walk_amount, target, clampf(delta * 6.0, 0.0, 1.0))
 	_walk_phase += delta * 9.0 * _walk_amount
-	body.walk(_walk_phase, _walk_amount)
+	body.walk(_walk_phase, _walk_amount, vy)
 
 
 ## Every StaticBody3D under our own body (the per-part paint colliders) — used to
