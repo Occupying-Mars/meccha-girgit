@@ -10,47 +10,48 @@ class_name HiderRig
 ## — all blended seamlessly (smooth-min), then auto-skinned to these bones.
 
 const HEIGHT := 1.74
-const SMOOTH_K := 0.07  # smooth-min blend radius (shoulders/hips/neck softness)
+## Small blend radius = defined CREASES where limbs meet the body (the big-K
+## version read as melted/clumped; the reference has crisp limb separation).
+const SMOOTH_K := 0.028
 
 ## Bone table: name -> {parent, origin}. Rest basis is identity for every bone,
 ## so pose rotations read as world-axis rotations about the bone origin.
 const BONES := [
-	{"name": "hips",    "parent": -1, "origin": Vector3(0, 0.78, 0)},
-	{"name": "spine",   "parent": 0,  "origin": Vector3(0, 1.06, 0)},
-	{"name": "head",    "parent": 1,  "origin": Vector3(0, 1.34, 0)},
-	{"name": "uarm_l",  "parent": 1,  "origin": Vector3(-0.16, 1.21, 0)},
-	{"name": "farm_l",  "parent": 3,  "origin": Vector3(-0.195, 0.95, 0)},
-	{"name": "uarm_r",  "parent": 1,  "origin": Vector3(0.16, 1.21, 0)},
-	{"name": "farm_r",  "parent": 5,  "origin": Vector3(0.195, 0.95, 0)},
-	{"name": "thigh_l", "parent": 0,  "origin": Vector3(-0.088, 0.74, 0)},
-	{"name": "shin_l",  "parent": 7,  "origin": Vector3(-0.092, 0.40, 0)},
-	{"name": "thigh_r", "parent": 0,  "origin": Vector3(0.088, 0.74, 0)},
-	{"name": "shin_r",  "parent": 9,  "origin": Vector3(0.092, 0.40, 0)},
+	{"name": "hips",    "parent": -1, "origin": Vector3(0, 0.70, 0)},
+	{"name": "spine",   "parent": 0,  "origin": Vector3(0, 1.00, 0)},
+	{"name": "head",    "parent": 1,  "origin": Vector3(0, 1.30, 0)},
+	{"name": "uarm_l",  "parent": 1,  "origin": Vector3(-0.19, 1.18, 0)},
+	{"name": "farm_l",  "parent": 3,  "origin": Vector3(-0.235, 0.90, 0)},
+	{"name": "uarm_r",  "parent": 1,  "origin": Vector3(0.19, 1.18, 0)},
+	{"name": "farm_r",  "parent": 5,  "origin": Vector3(0.235, 0.90, 0)},
+	{"name": "thigh_l", "parent": 0,  "origin": Vector3(-0.10, 0.62, 0)},
+	{"name": "shin_l",  "parent": 7,  "origin": Vector3(-0.103, 0.32, 0)},
+	{"name": "thigh_r", "parent": 0,  "origin": Vector3(0.10, 0.62, 0)},
+	{"name": "shin_r",  "parent": 9,  "origin": Vector3(0.103, 0.32, 0)},
 ]
 
 ## Sculpt volumes: round-cone capsules {bone, a, b, ra, rb} blended smooth-min.
-## Proportions measured off the reference: big round head (~22% of height),
-## sloped shoulders, arms ending mid-hip, legs with a small gap.
-## NOTE: limb segment pairs are COLLINEAR with matched radii at the joint, so
-## the surface has no kink/welt at elbows and knees; z-offsets are all zero for
-## the same reason. Hands stay clear of the thighs to avoid webbing at the hip.
+## Proportions matched to the clean reference figure: big round head (~24% of
+## height), THICK rounded arms bowed slightly outward with a visible groove
+## against the torso, legs touching at the crotch with a crease between them.
+## Limb segment pairs stay collinear-ish with matched joint radii (no welts).
 const PRIMS := [
-	# head (round, chin merging into the shoulders)
-	{"bone": 2, "a": Vector3(0, 1.505, 0), "b": Vector3(0, 1.560, 0), "ra": 0.167, "rb": 0.163},
-	# torso upper (chest/shoulder mass) + lower (belly/hips)
-	{"bone": 1, "a": Vector3(0, 1.20, 0), "b": Vector3(0, 1.02, 0), "ra": 0.146, "rb": 0.142},
-	{"bone": 0, "a": Vector3(0, 1.02, 0), "b": Vector3(0, 0.80, 0), "ra": 0.142, "rb": 0.134},
-	# arms: hang mostly clear of the torso (merged only at the shoulder) so the
-	# skin weights stay separable — buried arms drag chest skin like a membrane.
-	{"bone": 3, "a": Vector3(-0.168, 1.19, 0), "b": Vector3(-0.192, 0.975, 0), "ra": 0.074, "rb": 0.068},
-	{"bone": 4, "a": Vector3(-0.192, 0.975, 0), "b": Vector3(-0.214, 0.76, 0), "ra": 0.068, "rb": 0.060},
-	{"bone": 5, "a": Vector3(0.168, 1.19, 0), "b": Vector3(0.192, 0.975, 0), "ra": 0.074, "rb": 0.068},
-	{"bone": 6, "a": Vector3(0.192, 0.975, 0), "b": Vector3(0.214, 0.76, 0), "ra": 0.068, "rb": 0.060},
-	# legs: straight vertical taper hip->foot, split at the knee
-	{"bone": 7, "a": Vector3(-0.086, 0.73, 0), "b": Vector3(-0.088, 0.405, 0), "ra": 0.103, "rb": 0.089},
-	{"bone": 8, "a": Vector3(-0.088, 0.405, 0), "b": Vector3(-0.089, 0.082, 0), "ra": 0.089, "rb": 0.077},
-	{"bone": 9, "a": Vector3(0.086, 0.73, 0), "b": Vector3(0.088, 0.405, 0), "ra": 0.103, "rb": 0.089},
-	{"bone": 10, "a": Vector3(0.088, 0.405, 0), "b": Vector3(0.089, 0.082, 0), "ra": 0.089, "rb": 0.077},
+	# head (rounded egg — equal radii so the surface has no tangent ledge)
+	{"bone": 2, "a": Vector3(0, 1.465, 0), "b": Vector3(0, 1.555, 0), "ra": 0.180, "rb": 0.180},
+	# torso: chest/shoulder mass tapering to the hips
+	{"bone": 1, "a": Vector3(0, 1.22, 0), "b": Vector3(0, 0.98, 0), "ra": 0.170, "rb": 0.160},
+	{"bone": 0, "a": Vector3(0, 0.98, 0), "b": Vector3(0, 0.70, 0), "ra": 0.160, "rb": 0.145},
+	# arms: thick, rounded, bowing slightly OUT from the shoulder so a clear
+	# groove separates them from the torso; club ends just above the crotch.
+	{"bone": 3, "a": Vector3(-0.195, 1.16, 0), "b": Vector3(-0.235, 0.90, 0), "ra": 0.088, "rb": 0.084},
+	{"bone": 4, "a": Vector3(-0.235, 0.90, 0), "b": Vector3(-0.245, 0.66, 0), "ra": 0.084, "rb": 0.079},
+	{"bone": 5, "a": Vector3(0.195, 1.16, 0), "b": Vector3(0.235, 0.90, 0), "ra": 0.088, "rb": 0.084},
+	{"bone": 6, "a": Vector3(0.235, 0.90, 0), "b": Vector3(0.245, 0.66, 0), "ra": 0.084, "rb": 0.079},
+	# legs: touch at the crotch (crease, not a melt), slight taper to round feet
+	{"bone": 7, "a": Vector3(-0.100, 0.60, 0), "b": Vector3(-0.103, 0.32, 0), "ra": 0.100, "rb": 0.090},
+	{"bone": 8, "a": Vector3(-0.103, 0.32, 0), "b": Vector3(-0.105, 0.085, 0), "ra": 0.090, "rb": 0.080},
+	{"bone": 9, "a": Vector3(0.100, 0.60, 0), "b": Vector3(0.103, 0.32, 0), "ra": 0.100, "rb": 0.090},
+	{"bone": 10, "a": Vector3(0.103, 0.32, 0), "b": Vector3(0.105, 0.085, 0), "ra": 0.090, "rb": 0.080},
 ]
 
 
@@ -59,12 +60,12 @@ const PRIMS := [
 ## limb's rect — no cross-body bleed (an arm stamp can't smear onto the chest).
 ## {bones, rect(u0,v0,u1,v1), y0..y1 vertical extent, cx/cz local axis}
 const PAINT_GROUPS := [
-	{"bones": [0, 1], "rect": Rect2(0.00, 0.00, 0.50, 0.50), "y0": 0.62, "y1": 1.38, "cx": 0.0},    # torso
-	{"bones": [2], "rect": Rect2(0.50, 0.00, 0.50, 0.50), "y0": 1.28, "y1": 1.76, "cx": 0.0},        # head
-	{"bones": [3, 4], "rect": Rect2(0.00, 0.50, 0.25, 0.50), "y0": 0.66, "y1": 1.30, "cx": -0.19},   # arm_l
-	{"bones": [5, 6], "rect": Rect2(0.25, 0.50, 0.25, 0.50), "y0": 0.66, "y1": 1.30, "cx": 0.19},    # arm_r
-	{"bones": [7, 8], "rect": Rect2(0.50, 0.50, 0.25, 0.50), "y0": -0.02, "y1": 0.80, "cx": -0.088}, # leg_l
-	{"bones": [9, 10], "rect": Rect2(0.75, 0.50, 0.25, 0.50), "y0": -0.02, "y1": 0.80, "cx": 0.088}, # leg_r
+	{"bones": [0, 1], "rect": Rect2(0.00, 0.00, 0.50, 0.50), "y0": 0.52, "y1": 1.42, "cx": 0.0},    # torso
+	{"bones": [2], "rect": Rect2(0.50, 0.00, 0.50, 0.50), "y0": 1.26, "y1": 1.78, "cx": 0.0},        # head
+	{"bones": [3, 4], "rect": Rect2(0.00, 0.50, 0.25, 0.50), "y0": 0.54, "y1": 1.28, "cx": -0.23},   # arm_l
+	{"bones": [5, 6], "rect": Rect2(0.25, 0.50, 0.25, 0.50), "y0": 0.54, "y1": 1.28, "cx": 0.23},    # arm_r
+	{"bones": [7, 8], "rect": Rect2(0.50, 0.50, 0.25, 0.50), "y0": -0.02, "y1": 0.72, "cx": -0.103}, # leg_l
+	{"bones": [9, 10], "rect": Rect2(0.75, 0.50, 0.25, 0.50), "y0": -0.02, "y1": 0.72, "cx": 0.103}, # leg_r
 ]
 
 

@@ -5,9 +5,9 @@ extends SceneTree
 ## Runtime never runs marching cubes — it just loads this resource. Run:
 ##   godot --headless --path . --script res://scripts/dev/bake_hider_mesh.gd
 
-const CELL := 0.02
-const BOUNDS_MIN := Vector3(-0.40, -0.02, -0.30)
-const BOUNDS_MAX := Vector3(0.40, 1.80, 0.30)
+const CELL := 0.013
+const BOUNDS_MIN := Vector3(-0.42, -0.02, -0.30)
+const BOUNDS_MAX := Vector3(0.42, 1.80, 0.30)
 
 
 func _initialize() -> void:
