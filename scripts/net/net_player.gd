@@ -304,9 +304,23 @@ func _physics_process(delta: float) -> void:
 	velocity.z = move.z * move_speed
 	move_and_slide()
 
+	# Out-of-bounds backstop: if we somehow ended up falling outside the map
+	# (any glitch, any map), snap back to the spawn area instead of falling
+	# forever in the void.
+	if global_position.y < -6.0:
+		_respawn_inside()
+
 	if move.length() > 0.1:
 		var target_yaw := atan2(move.x, move.z)
 		body.rotation.y = lerp_angle(body.rotation.y, target_yaw, 0.2)
+
+
+func _respawn_inside() -> void:
+	var scene := get_tree().current_scene
+	var fallback: Vector3 = scene.spawn_base if "spawn_base" in scene else Vector3(0, 1, 0)
+	global_position = fallback + Vector3(0, 0.5, 0)
+	velocity = Vector3.ZERO
+	print("[net_player] fell out of bounds — respawned inside")
 
 
 ## --- Wall-stick (hiders cling to and climb walls) ----------------------------
@@ -353,23 +367,30 @@ func _try_stick() -> void:
 
 func _wall_adjust(delta: float) -> void:
 	# Climb freely UP the wall face — the whole wall is fair game. The ONLY limit
-	# is that you can't rise once the wall no longer extends just above your feet
-	# (you've reached its top), so you can never climb OVER a wall and out of the
-	# map. A generous per-latch cap is just a runaway guard.
+	# is that your HEAD can't rise past the wall's top edge: check the wall is
+	# still there at head height, so the body always stays inside the map (feet-
+	# level checks let the model poke out above the roof at max climb). You can
+	# never climb OVER a wall. A generous per-latch cap is just a runaway guard.
 	var v := 0.0
 	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
 		v += 1.0
 	if Input.is_action_pressed("move_back"):
 		v -= 1.0
 	velocity = Vector3.ZERO
-	if v > 0.0 and not _wall_present_at(global_position.y + 0.1):
+	if v > 0.0 and not _wall_present_at(global_position.y + _body_top()):
 		v = 0.0
 	var hi := _stick_y + 6.0
 	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, hi)
 
 
-## Is the wall we're clung to still there just above the feet? A tiny lookahead
-## (0.1) means you can climb the whole wall and stop only at its very top.
+## Top of the visible body above the feet (head sphere tops at ~1.74 body-local,
+## times the avatar's scale — ~0.6 for a shrunken hider).
+func _body_top() -> float:
+	return 1.8 * body.scale.y
+
+
+## Is the wall we're clung to still there at `check_y`? Checked at head height
+## while climbing, so you climb until your head meets the top — never past it.
 func _wall_present_at(check_y: float) -> bool:
 	var space := get_world_3d().direct_space_state
 	var from := Vector3(global_position.x, check_y, global_position.z)
