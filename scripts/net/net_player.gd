@@ -366,19 +366,30 @@ func _try_stick() -> void:
 
 
 func _wall_adjust(delta: float) -> void:
-	# Climb freely UP the wall face — the whole wall is fair game. The ONLY limit
-	# is that your HEAD can't rise past the wall's top edge: check the wall is
-	# still there at head height, so the body always stays inside the map (feet-
-	# level checks let the model poke out above the roof at max climb). You can
-	# never climb OVER a wall. A generous per-latch cap is just a runaway guard.
+	# Climb freely UP the wall face. Two independent limits, both must pass:
+	#  1) HEAD vs the wall: check the wall is still there at head height, so
+	#     you can never climb OVER a wall (feet-only checks let the model poke
+	#     out above the roof at max climb).
+	#  2) CAMERA vs the ceiling: on maps where the ceiling sits right at the
+	#     wall's own height (e.g. backrooms), reaching the head cap in (1)
+	#     still leaves the ORBITING CAMERA — mounted above the yaw pivot, further
+	#     out via the spring arm — high enough to poke INSIDE the ceiling slab.
+	#     A ray embedded in solid geometry hits nothing in any direction (rays
+	#     don't register against the shape they start inside), which is exactly
+	#     the "outside the map, seeing a blank void" bug. So before climbing,
+	#     also check straight up for the camera's full possible reach
+	#     (yaw pivot height + the whole spring arm length + a margin).
 	var v := 0.0
 	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
 		v += 1.0
 	if Input.is_action_pressed("move_back"):
 		v -= 1.0
 	velocity = Vector3.ZERO
-	if v > 0.0 and not _wall_present_at(global_position.y + _body_top()):
-		v = 0.0
+	if v > 0.0:
+		if not _wall_present_at(global_position.y + _body_top()):
+			v = 0.0
+		elif not _clear_above(_camera_reach()):
+			v = 0.0
 	var hi := _stick_y + 6.0
 	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, hi)
 
@@ -387,6 +398,12 @@ func _wall_adjust(delta: float) -> void:
 ## times the avatar's scale — ~0.6 for a shrunken hider).
 func _body_top() -> float:
 	return 1.8 * body.scale.y
+
+
+## How high above the feet the orbiting camera can possibly reach (yaw pivot
+## height + the full spring arm length + a small margin), regardless of pitch.
+func _camera_reach() -> float:
+	return _yaw.position.y + _spring.spring_length + 0.3
 
 
 ## Is the wall we're clung to still there at `check_y`? Checked at head height
@@ -398,6 +415,17 @@ func _wall_present_at(check_y: float) -> bool:
 	q.exclude = [get_rid()]
 	q.collision_mask = 1
 	return not space.intersect_ray(q).is_empty()
+
+
+## True if there's clear space straight up from the feet for `height` — used to
+## stop climbing before the camera's reach can poke into a ceiling above.
+func _clear_above(height: float) -> bool:
+	var space := get_world_3d().direct_space_state
+	var from := global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(0, height, 0))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	return space.intersect_ray(q).is_empty()
 
 
 func _unstick() -> void:
