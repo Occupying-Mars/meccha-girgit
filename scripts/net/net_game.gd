@@ -29,6 +29,7 @@ const MAPS := {
 		"script": "res://scripts/core/backrooms_builder.gd",
 		"spawn": Vector3(-10.5, 0.4, 0.0),
 		"ambient": 0.85, "sun": 0.5, "exposure": 1.0,
+		"probe_size": Vector3(43, 4, 36), "probe_pos": Vector3(0, 1.5, 0), "probe_interior": true,
 	},
 	"warehouse": {
 		"label": "Warehouse",
@@ -43,6 +44,7 @@ const MAPS := {
 		"require": "res://assets/maps/kaykit/floor.glb",
 		"dark_bg": true, "ambient_color": Color(0.40, 0.42, 0.55),
 		"ambient": 0.55, "sun": 0.55, "exposure": 0.85,
+		"probe_size": Vector3(25, 7, 25), "probe_pos": Vector3(0, 2.5, 0), "probe_interior": true,
 	},
 	"house": {
 		"label": "House / Mansion",
@@ -51,6 +53,7 @@ const MAPS := {
 		"require": "res://assets/maps/furniture/couch.gltf",
 		"ambient": 0.55, "sun": 1.0, "exposure": 1.0, "ssil": true,
 		"warm_ambient": Color(0.50, 0.47, 0.44),
+		"probe_size": Vector3(25, 5, 17), "probe_pos": Vector3(0, 2, 0), "probe_interior": true,
 	},
 	"arena": {
 		"label": "Test Arena",
@@ -161,6 +164,15 @@ func _build_map(map_id: String) -> void:
 	node.name = "Map"
 	node.set_script(load(info["script"]))
 	_map_root.add_child(node)
+	# One baked reflection probe covering the map: grounded speculars where SSR
+	# can't reach (off-screen / behind-camera surfaces). Baked once, then free.
+	var probe := ReflectionProbe.new()
+	probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	probe.size = info.get("probe_size", Vector3(40, 12, 40))
+	probe.position = info.get("probe_pos", Vector3(0, 4, 0))
+	probe.box_projection = info.get("probe_interior", false)
+	probe.interior = info.get("probe_interior", false)
+	_map_root.add_child(probe)
 	spawn_base = info["spawn"]
 	_apply_lighting(info)
 	print("[net] built map: ", map_id)
@@ -180,10 +192,12 @@ func _apply_lighting(info: Dictionary) -> void:
 		# Roofed-but-bright interior: sky outside, warm cosy fill within (the
 		# rooms are actually lit by their own ceiling spots + lamps).
 		env.background_mode = Environment.BG_SKY
+		env.sky = _physical_sky()
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = info["warm_ambient"]
 	else:
 		env.background_mode = Environment.BG_SKY
+		env.sky = _physical_sky()
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	if info.has("ambient"):
 		env.ambient_light_energy = info["ambient"]
@@ -194,29 +208,51 @@ func _apply_lighting(info: Dictionary) -> void:
 	_apply_quality(env, info)
 
 
-## Shared post-processing — depth (SSAO/SSIL), filmic tone, soft bloom, colour
-## grade and soft sun shadows. Lifts every map from flat-shaded to polished.
+## Shared rendering stack, tuned for grounded realism rather than "punch":
+## real bounced light (SDFGI) instead of a flat ambient fill, real reflections
+## (SSR; a per-map probe is added in _build_map), honest sun shadows (physical
+## ~0.5 deg angular size), a NEUTRAL grade (no baked contrast/saturation push),
+## and SSAO relaxed to a supporting role now that GI does the true occlusion.
 func _apply_quality(env: Environment, info: Dictionary) -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_white = 1.6
+	env.tonemap_white = 1.4
+	# Real-time global illumination: light bounces off floors/walls, corners
+	# darken naturally, colour bleeds subtly between surfaces. The constant
+	# ambient drops to a fraction — GI replaces the fake uniform fill.
+	env.sdfgi_enabled = info.get("gi", true)
+	env.sdfgi_use_occlusion = true
+	env.sdfgi_bounce_feedback = 0.4
+	env.sdfgi_cascades = 4
+	env.sdfgi_min_cell_size = 0.15
+	env.sdfgi_energy = 1.1
+	if env.sdfgi_enabled:
+		env.ambient_light_energy *= 0.25
+	# Screen-space reflections ground objects on semi-glossy floors.
+	env.ssr_enabled = true
+	env.ssr_max_steps = 56
+	env.ssr_fade_in = 0.15
+	env.ssr_fade_out = 2.0
+	env.ssr_depth_tolerance = 0.4
 	env.ssao_enabled = true
 	env.ssao_radius = 1.4
-	env.ssao_intensity = 2.6
-	env.ssao_power = 1.7
+	env.ssao_intensity = 1.4
+	env.ssao_power = 1.5
 	env.ssao_detail = 0.6
 	env.ssil_enabled = info.get("ssil", false)
 	env.ssil_radius = 4.0
 	env.ssil_intensity = 1.1
+	# Glow only for true highlights (light fixtures), not a haze on everything.
 	env.glow_enabled = true
-	env.glow_intensity = 0.65
+	env.glow_intensity = 0.35
 	env.glow_strength = 1.0
 	env.glow_bloom = 0.08
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
-	env.glow_hdr_threshold = 1.0
+	env.glow_hdr_threshold = 1.2
+	# Neutral grade — realism comes from light transport, not colour pushing.
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.0
-	env.adjustment_contrast = 1.07
-	env.adjustment_saturation = 1.12
+	env.adjustment_contrast = 1.0
+	env.adjustment_saturation = 1.0
 	if info.get("fog", false):
 		env.fog_enabled = true
 		env.fog_light_color = info.get("fog_color", Color(0.72, 0.74, 0.80))
@@ -224,10 +260,24 @@ func _apply_quality(env: Environment, info: Dictionary) -> void:
 		env.fog_aerial_perspective = 0.3
 	else:
 		env.fog_enabled = false
+	# Honest sun: real angular size (~0.5 deg) gives crisp contact shadows that
+	# soften naturally with distance, instead of one uniform blur everywhere.
 	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	_sun.shadow_blur = 1.4
-	_sun.light_angular_distance = 1.2
+	_sun.shadow_blur = 0.75
+	_sun.light_angular_distance = 0.5
+	_sun.light_color = Color(1.0, 0.96, 0.89)
 	_sun.shadow_bias = 0.05
+
+
+var _phys_sky_cache: Sky = null
+
+## Physically-based sky — believable atmosphere + correct ambient/reflection
+## source for outdoor-visible maps (replaces the cartoon gradient sky).
+func _physical_sky() -> Sky:
+	if _phys_sky_cache == null:
+		_phys_sky_cache = Sky.new()
+		_phys_sky_cache.sky_material = PhysicalSkyMaterial.new()
+	return _phys_sky_cache
 
 
 func _start_session_mode() -> void:
