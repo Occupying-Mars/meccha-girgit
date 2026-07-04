@@ -77,6 +77,10 @@ var direct_invite_code: String = ""
 var direct_public_ip: String = ""
 var direct_status: String = ""
 var _upnp: UPNP = null
+
+## EOS (Epic Online Services): internet play by lobby code, no infra to run.
+var eos: bool = false
+var eos_code: String = ""   # the EOS lobby id == the invite code
 ## How long a client waits for the connection (NAT punch, then relay) to fully
 ## establish before giving up. We block on this so the menu never drops a player
 ## into the lobby while still disconnected ("stuck on Waiting for host").
@@ -169,6 +173,60 @@ func host_direct(uname: String, game_mode: int) -> int:
 		return err
 	_try_upnp_forward()
 	return OK
+
+
+## --- EOS: internet play with no VPS/relay run by anyone ----------------------
+## Host over Epic Online Services. Anonymous Device-ID login (players need no
+## Epic account), then create a lobby whose id is a short invite code. Friends
+## join by that code from anywhere — Epic does the NAT punchthrough/relay for
+## free. Uses the SAME client/server model as ENet (host = peer 1), so the rest
+## of the game is unchanged.
+func host_eos(uname: String, game_mode: int) -> int:
+	if not EOSNet.available:
+		return ERR_UNAVAILABLE
+	username = _clean_name(uname)
+	mode = game_mode
+	is_host = true
+	decided_seeker_id = 1
+	eos = true
+	eos_code = _gen_eos_code()
+	var err: int = await EOSNet.create_and_host(eos_code)
+	if err != OK:
+		eos = false
+		return err
+	active = true
+	players = {1: username}
+	_connect_once(multiplayer.peer_disconnected, _on_peer_disconnected)
+	players_changed.emit()
+	return OK
+
+
+func join_eos(uname: String, code: String) -> int:
+	if not EOSNet.available:
+		return ERR_UNAVAILABLE
+	username = _clean_name(uname)
+	is_host = false
+	eos = true
+	var err: int = await EOSNet.join_by_code(code.strip_edges().to_upper())
+	if err != OK:
+		eos = false
+		return err
+	eos_code = EOSNet.current_lobby_id
+	active = true
+	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
+	_connect_once(multiplayer.server_disconnected, _reset)
+	return OK
+
+
+## Short, unambiguous invite code (no 0/O/1/I/L). Doubles as the EOS lobby id.
+func _gen_eos_code() -> String:
+	const ALPHA := "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var s := ""
+	for i in 6:
+		s += ALPHA[rng.randi() % ALPHA.length()]
+	return s
 
 
 func join_game(uname: String, code: String, want_online: bool = false) -> int:
@@ -471,6 +529,8 @@ func _hs_name(err: int) -> String:
 ## Invite code: the relay OID online, the encoded PUBLIC IP for direct-internet
 ## hosting (once UPnP has resolved it), or the encoded LOCAL IP on plain LAN.
 func invite_code() -> String:
+	if eos:
+		return eos_code
 	if online:
 		return online_oid
 	if direct and direct_invite_code != "":
@@ -694,12 +754,18 @@ func _reset() -> void:
 	players.clear()
 	multiplayer.multiplayer_peer = null
 	_upnp_unmap()
+	if eos:
+		EOSNet.leave_lobby()
+		eos = false
+		eos_code = ""
 
 
 ## Leave the current match and tear down networking (used by the results menu).
 func leave() -> void:
 	if Noray.is_connected_to_host():
 		Noray.disconnect_from_host()
+	if eos:
+		EOSNet.leave_lobby()
 	multiplayer.multiplayer_peer = null
 	active = false
 	is_host = false
@@ -708,6 +774,8 @@ func leave() -> void:
 	online = false
 	online_oid = ""
 	host_oid = ""
+	eos = false
+	eos_code = ""
 	players.clear()
 	GameState.authoritative = true
 	_upnp_unmap()

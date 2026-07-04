@@ -4,10 +4,10 @@ extends Control
 const ROOT := "Center/Card/Margin/VBox"
 ## How friends reach a peer-hosted game (irrelevant when "Use your own server"
 ## is on — that always connects outbound to the configured dedicated server).
-## LAN: same Wi-Fi/network only. DIRECT: host's own PC, reachable over the
-## internet via a UPnP-forwarded port + public IP (no relay needed). RELAY:
-## routed through a Noray relay server (works even if UPnP is unavailable).
-enum HostVia { LAN, DIRECT, RELAY }
+## EOS: Epic Online Services — host from your PC, friends join by code from
+## anywhere (works through CGNAT, no port-forward, no relay to run). LAN: same
+## Wi-Fi only. DIRECT: UPnP port-forward + public IP. RELAY: Noray relay.
+enum HostVia { EOS, LAN, DIRECT, RELAY }
 
 @onready var _username: LineEdit = get_node(ROOT + "/UsernameRow/Username")
 @onready var _mode: OptionButton = get_node(ROOT + "/ModeRow/Mode")
@@ -60,10 +60,14 @@ func _ready() -> void:
 	_join_btn.pressed.connect(_on_join)
 	_join_server_btn.pressed.connect(_on_join_server)
 	_host_via.clear()
+	_host_via.add_item("Online (EOS) — no relay, no VPS", HostVia.EOS)
 	_host_via.add_item("Local network (LAN)", HostVia.LAN)
 	_host_via.add_item("Direct — auto port-forward (internet)", HostVia.DIRECT)
 	_host_via.add_item("Relay (Noray) — works anywhere", HostVia.RELAY)
-	_host_via.select(HostVia.DIRECT)  # best default: no relay to run/own, works over the internet
+	if EOSNet.available:
+		_host_via.select(HostVia.EOS)  # best default: no relay/port-forward/VPS needed
+	else:
+		_host_via.select(HostVia.DIRECT)
 	_host_via.item_selected.connect(_on_host_via_selected)
 	# Server vs peer-host. A configured DEFAULT_SERVER (your VPS) pre-fills the
 	# field for convenience, but the checkbox always STARTS UNCHECKED — the
@@ -188,6 +192,9 @@ func _on_host() -> void:
 	NetSession.game_mode = _mode.get_selected_id()  # 0 Normal · 1 Infection · 2 Double
 	var err: int
 	match via:
+		HostVia.EOS:
+			_set_busy("Hosting online (EOS)…")
+			err = await NetSession.host_eos(_username.text, NetSession.Mode.RANDOM)
 		HostVia.RELAY:
 			_set_busy("Connecting to relay…")
 			err = await NetSession.host_game(_username.text, NetSession.Mode.RANDOM, true)
@@ -204,12 +211,18 @@ func _on_host() -> void:
 
 
 func _on_join() -> void:
-	var via_relay := _host_via.selected == HostVia.RELAY
-	NetSession.relay_address = _relay.text if via_relay else ""
-	_set_busy("Connecting…")
-	# LAN and DIRECT joins are identical on the client side — both are just an
-	# outbound connect to an ip:port decoded from the invite code.
-	var err: int = await NetSession.join_game(_username.text, _code.text, via_relay)
+	var via := _host_via.selected
+	var err: int
+	if via == HostVia.EOS:
+		_set_busy("Connecting online (EOS)…")
+		err = await NetSession.join_eos(_username.text, _code.text)
+	else:
+		var via_relay := via == HostVia.RELAY
+		NetSession.relay_address = _relay.text if via_relay else ""
+		_set_busy("Connecting…")
+		# LAN and DIRECT joins are identical on the client side — both are just
+		# an outbound connect to an ip:port decoded from the invite code.
+		err = await NetSession.join_game(_username.text, _code.text, via_relay)
 	if err != OK:
 		_set_error("Bad invite code or connection failed (%s)." % error_string(err))
 		return

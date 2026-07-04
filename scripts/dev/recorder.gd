@@ -19,7 +19,7 @@ extends Node
 ##   --no-quit           don't quit after captures (lets the user keep playing)
 ##   --test=NAME         drive a scripted input sequence in parallel with capture
 
-const OUT_ROOT := "/tmp/meccha_runs"
+const OUT_ROOT := "D:/meccha_runs"
 
 var run_name: String = ""
 var frames: int = 4
@@ -155,6 +155,13 @@ func _run_test_async() -> void:
 		"dedi_join":
 			# Join a dedicated server at 127.0.0.1; first joiner (admin) starts.
 			_dedi_join()
+		"eos_host":
+			# Host over EOS; write the assigned lobby code to a scratch file so
+			# a separate eos_join process (same machine, --test only) can read it.
+			_eos_host()
+		"eos_join":
+			# Join the EOS lobby whose code was written by an eos_host run.
+			_eos_join()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
 
@@ -367,6 +374,40 @@ func _menu_join() -> void:
 		for p in players.get_children():
 			print("[recorder] client: %s role=%d mine=%s"
 				% [p.name, p.role, str(p.is_multiplayer_authority())])
+
+
+const EOS_CODE_FILE := "D:/meccha_runs/eos_lobby_code.txt"
+
+
+func _eos_host() -> void:
+	var err: int = await NetSession.host_eos("HostUser", NetSession.Mode.DECIDED)
+	print("[recorder] eos_host err=%s code=%s" % [error_string(err), NetSession.eos_code])
+	if err != OK:
+		return
+	var f := FileAccess.open(EOS_CODE_FILE, FileAccess.WRITE)
+	f.store_string(NetSession.eos_code)
+	f.close()
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(15.0).timeout
+	print("[recorder] eos_host roster: ", NetSession.players)
+
+
+func _eos_join() -> void:
+	var code := ""
+	for i in 20:
+		if FileAccess.file_exists(EOS_CODE_FILE):
+			code = FileAccess.get_file_as_string(EOS_CODE_FILE).strip_edges()
+			if not code.is_empty():
+				break
+		await get_tree().create_timer(0.5).timeout
+	print("[recorder] eos_join: using code=", code)
+	var err: int = await NetSession.join_eos("GuestUser", code)
+	print("[recorder] eos_join err=%s" % error_string(err))
+	if err != OK:
+		return
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+	await get_tree().create_timer(10.0).timeout
+	print("[recorder] eos_join roster: ", NetSession.players)
 
 
 func _net_stick() -> void:
