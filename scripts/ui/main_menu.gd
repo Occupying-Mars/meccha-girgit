@@ -211,19 +211,39 @@ func _on_host() -> void:
 
 
 func _on_join() -> void:
-	var via := _host_via.selected
+	var code := _code.text
 	var err: int
-	if via == HostVia.EOS:
+	# Route by the SHAPE of the code, not the "Friends via" dropdown — a joiner
+	# should never have to match how the host set up. A short lobby code is EOS;
+	# a 12-hex invite or a raw ip:port is the ENet path. (This is the fix for the
+	# "bad invite code" a friend hit when their dropdown wasn't on EOS.)
+	if _looks_like_eos_code(code):
+		if not EOSNet.available:
+			_set_error("That's an Online (EOS) code, but this copy has no EOS. Extract the WHOLE zip and keep the .dll files next to the .exe, then reopen.")
+			return
 		_set_busy("Connecting online (EOS)…")
-		err = await NetSession.join_eos(_username.text, _code.text)
+		err = await NetSession.join_eos(_username.text, code)
 	else:
-		var via_relay := via == HostVia.RELAY
+		var via_relay := _host_via.selected == HostVia.RELAY
 		NetSession.relay_address = _relay.text if via_relay else ""
 		_set_busy("Connecting…")
 		# LAN and DIRECT joins are identical on the client side — both are just
 		# an outbound connect to an ip:port decoded from the invite code.
-		err = await NetSession.join_game(_username.text, _code.text, via_relay)
+		err = await NetSession.join_game(_username.text, code, via_relay)
 	if err != OK:
 		_set_error("Bad invite code or connection failed (%s)." % error_string(err))
 		return
 	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+
+
+## An EOS lobby code is 6 chars from the unambiguous alphabet NetSession uses
+## (no 0/O/1/I/L). Anything else — a 12-hex LAN/Direct invite or an ip:port — is
+## not an EOS code.
+func _looks_like_eos_code(code: String) -> bool:
+	var c := code.strip_edges().to_upper()
+	if c.length() != 6:
+		return false
+	for i in c.length():
+		if not "ABCDEFGHJKMNPQRSTUVWXYZ23456789".contains(c[i]):
+			return false
+	return true

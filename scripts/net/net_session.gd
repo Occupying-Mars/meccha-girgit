@@ -81,6 +81,7 @@ var _upnp: UPNP = null
 ## EOS (Epic Online Services): internet play by lobby code, no infra to run.
 var eos: bool = false
 var eos_code: String = ""   # the EOS lobby id == the invite code
+var _eos_connected: bool = false  # set once we truly reach a live host (join guard)
 ## How long a client waits for the connection (NAT punch, then relay) to fully
 ## establish before giving up. We block on this so the menu never drops a player
 ## into the lobby while still disconnected ("stuck on Waiting for host").
@@ -212,10 +213,40 @@ func join_eos(uname: String, code: String) -> int:
 		eos = false
 		return err
 	eos_code = EOSNet.current_lobby_id
-	active = true
+	_eos_connected = false
 	_connect_once(multiplayer.connected_to_server, _on_connected_to_server)
 	_connect_once(multiplayer.server_disconnected, _reset)
+	# Joining the EOS LOBBY succeeds even for a stale/ghost lobby — one whose host
+	# already left but that Epic hasn't reaped yet. That used to drop the joiner
+	# into a lobby that never starts ("Waiting for host…" forever). Block until we
+	# truly connect to a live host game, or fail cleanly so the menu shows an error.
+	# Success is signalled by connected_to_server (canonical) or the peer reporting
+	# CONNECTED; a dead host reaches neither and we time out.
+	var waited := 0.0
+	while waited < CONNECT_TIMEOUT and not _eos_join_connected():
+		var peer := multiplayer.multiplayer_peer
+		if peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+			break  # failed outright — no point waiting the full timeout
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	if not _eos_join_connected():
+		EOSNet.leave_lobby()
+		if multiplayer.multiplayer_peer != null:
+			multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+		eos = false
+		eos_code = ""
+		return ERR_TIMEOUT
+	active = true
 	return OK
+
+
+## True once we've genuinely connected to the host game behind an EOS lobby.
+func _eos_join_connected() -> bool:
+	if _eos_connected:
+		return true
+	var peer := multiplayer.multiplayer_peer
+	return peer != null and peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 
 ## Short, unambiguous invite code (no 0/O/1/I/L). Doubles as the EOS lobby id.
@@ -539,6 +570,7 @@ func invite_code() -> String:
 
 
 func _on_connected_to_server() -> void:
+	_eos_connected = true  # (EOS join guard) we reached a live host
 	_netlog("connected_to_server — telling host our name")
 	_register_player.rpc_id(1, username)
 
@@ -662,8 +694,14 @@ func start_game() -> void:
 		return
 	print("[net] round start: map=%s mode=%d players=%d" % [selected_map, game_mode, ids.size()])
 	var sids: Array = []
-	if mode == Mode.DECIDED and players.has(decided_seeker_id):
-		sids = [decided_seeker_id]
+	if mode == Mode.DECIDED:
+		# Respect the host's exact choice — including "nobody" (id 0 / not a player),
+		# which means everyone hides (handy for solo, to roam/paint/pose freely).
+		# Previously this fell through to a random pick, so "nobody" never worked.
+		if players.has(decided_seeker_id):
+			sids = [decided_seeker_id]
+		else:
+			sids = []
 	else:
 		# Double needs 3+ players (else it'd leave nobody hiding); otherwise 1.
 		var want := 2 if game_mode == 2 and ids.size() >= 3 else 1
