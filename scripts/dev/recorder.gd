@@ -155,6 +155,10 @@ func _run_test_async() -> void:
 		"dedi_join":
 			# Join a dedicated server at 127.0.0.1; first joiner (admin) starts.
 			_dedi_join()
+		"lobby_show":
+			# Host LAN in DECIDED mode and hold in the lobby (no auto-start) so the
+			# lobby overlay — incl. the seeker-assignment toggle — can be captured.
+			_lobby_show()
 		"eos_host":
 			# Host over EOS; write the assigned lobby code to a scratch file so
 			# a separate eos_join process (same machine, --test only) can read it.
@@ -377,6 +381,14 @@ func _menu_join() -> void:
 
 
 const EOS_CODE_FILE := "D:/meccha_runs/eos_lobby_code.txt"
+
+
+func _lobby_show() -> void:
+	# Host LAN in DECIDED mode and hold in the lobby (no auto-start), so the lobby
+	# overlay — invite code, seeker-assignment toggle, seeker picker — stays up.
+	NetSession.selected_map = "arena"  # light map so the lobby is up fast
+	NetSession.host_game("HostUser", NetSession.Mode.DECIDED)
+	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
 
 
 func _eos_host() -> void:

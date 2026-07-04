@@ -752,12 +752,18 @@ func _reset() -> void:
 	dedicated = false
 	admin_id = 1
 	players.clear()
+	# Close the peer's transport before dropping it so its socket/connections are
+	# released — otherwise a leftover EOS P2P socket can stop the NEXT hosted game
+	# from accepting joiners.
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
 	_upnp_unmap()
 	if eos:
 		EOSNet.leave_lobby()
 		eos = false
 		eos_code = ""
+	GameState.reset()  # so a fresh session lands in the lobby, not a stale RESULTS
 
 
 ## Leave the current match and tear down networking (used by the results menu).
@@ -766,6 +772,8 @@ func leave() -> void:
 		Noray.disconnect_from_host()
 	if eos:
 		EOSNet.leave_lobby()
+	if multiplayer.multiplayer_peer != null:
+		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
 	active = false
 	is_host = false
@@ -778,6 +786,7 @@ func leave() -> void:
 	eos_code = ""
 	players.clear()
 	GameState.authoritative = true
+	GameState.reset()  # clear any stale RESULTS/SEEK phase so the next game is clean
 	_upnp_unmap()
 
 

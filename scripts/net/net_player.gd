@@ -563,8 +563,24 @@ func _do_whistle() -> void:
 @rpc("authority", "call_local", "reliable")
 func play_whistle() -> void:
 	if _whistle.stream != null:
-		_whistle.play()
-	_whistle_popup()
+		_whistle.play()  # audio for everyone — the directional sound IS the tell
+	# The floating "♪" is a hider-only cue: it must NOT render on the seeker's
+	# screen, or it would pin the hider's exact spot visually (way stronger than
+	# the intended audio hint). Show it to hiders/spectators, hide it from a seeker.
+	if not _local_viewer_is_seeker():
+		_whistle_popup()
+
+
+## Is the player viewing THIS machine's screen a seeker? (The local avatar is the
+## one this peer has authority over.) Used to withhold the whistle's visual cue.
+func _local_viewer_is_seeker() -> bool:
+	var parent := get_parent()
+	if parent == null:
+		return false
+	for p in parent.get_children():
+		if p is NetPlayer and p.is_multiplayer_authority():
+			return p.role == Role.SEEKER
+	return false
 
 
 func _whistle_popup() -> void:

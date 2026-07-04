@@ -303,6 +303,11 @@ func _physical_sky() -> Sky:
 func _start_session_mode() -> void:
 	# Connection was established by the menu/lobby; roles come from NetSession,
 	# assigned when the host starts. Avatars spawn at start (lobby has none).
+	# Force a clean lobby phase first: the GameState autoload persists across the
+	# menu->game scene change, so a previous round could leave it at RESULTS/SEEK,
+	# which hides the lobby overlay and blocks joiners from entering the new game.
+	# (Emitting ASSIGN re-shows the lobby, which already ran _ready with stale state.)
+	GameState.reset()
 	NetSession.started.connect(_on_session_started)
 	NetSession.map_changed.connect(_on_map_changed)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)

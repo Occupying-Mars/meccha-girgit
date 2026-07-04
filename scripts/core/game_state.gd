@@ -69,6 +69,17 @@ func start_match() -> void:
 	set_phase(Phase.PREP)
 
 
+## Drop back to a clean pre-match lobby state. Called when leaving a match (so the
+## NEXT hosted/joined game starts in ASSIGN and the lobby overlay shows) and
+## defensively when a fresh session scene loads — without this the phase persisted
+## at RESULTS from the previous round, which hid the lobby and left joiners unable
+## to enter the new game.
+func reset() -> void:
+	_running = false
+	_time_left = 0.0
+	set_phase(Phase.ASSIGN)
+
+
 func set_phase(new_phase: int) -> void:
 	phase = new_phase
 	match phase:

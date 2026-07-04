@@ -8,6 +8,9 @@ extends CanvasLayer
 @onready var _mode: Label = $Panel/Margin/VBox/ModeLabel
 @onready var _list: VBoxContainer = $Panel/Margin/VBox/Players
 @onready var _seeker_pick: OptionButton = $Panel/Margin/VBox/SeekerPick
+## Created in code (not the .tscn): lets the host choose how the seeker is picked —
+## RANDOM (a random player) or DECIDED (host picks exactly who, via _seeker_pick).
+var _seeker_mode: OptionButton
 @onready var _game_mode_pick: OptionButton = $Panel/Margin/VBox/GameModePick
 @onready var _map_pick: OptionButton = $Panel/Margin/VBox/MapPick
 @onready var _time_row: HBoxContainer = $Panel/Margin/VBox/TimeRow
@@ -55,6 +58,15 @@ func _ready() -> void:
 	# Mirror settings the server/admin pushes (so every lobby shows the real map).
 	NetSession.map_changed.connect(_sync_from_session)
 	_seeker_pick.item_selected.connect(_on_seeker_pick)
+	# Seeker-assignment toggle, sitting just above the "who seeks" picker.
+	_seeker_mode = OptionButton.new()
+	_seeker_mode.add_item("Seeker: random player", NetSession.Mode.RANDOM)
+	_seeker_mode.add_item("Seeker: you decide", NetSession.Mode.DECIDED)
+	_seeker_mode.select(clampi(NetSession.mode, 0, 1))
+	var vbox: VBoxContainer = _seeker_pick.get_parent()
+	vbox.add_child(_seeker_mode)
+	vbox.move_child(_seeker_mode, _seeker_pick.get_index())  # place it right before SeekerPick
+	_seeker_mode.item_selected.connect(_on_seeker_mode)
 	_copy_btn.pressed.connect(_on_copy)
 	_on_phase(GameState.phase)  # visible only while in ASSIGN
 
@@ -106,6 +118,10 @@ func _refresh() -> void:
 		_code.text = "Connected — waiting in lobby"
 		_copy_btn.visible = false
 		_direct_status.visible = false
+	# Seeker assignment: host-only, and not on a dedicated server (its admin is a
+	# client and the seeker is always chosen server-side there).
+	if _seeker_mode != null:
+		_seeker_mode.visible = admin and not NetSession.dedicated
 	_seeker_pick.visible = admin and NetSession.mode == NetSession.Mode.DECIDED and not NetSession.dedicated
 
 	for c in _list.get_children():
@@ -134,6 +150,11 @@ func _refresh() -> void:
 				sel = idx
 			idx += 1
 		_seeker_pick.select(sel)
+
+
+func _on_seeker_mode(index: int) -> void:
+	NetSession.mode = _seeker_mode.get_item_id(index)
+	_refresh()  # reveals/hides the "who seeks" picker
 
 
 func _on_seeker_pick(index: int) -> void:
