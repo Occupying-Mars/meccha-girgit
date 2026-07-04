@@ -392,15 +392,25 @@ func _piece(piece: String, lx: float, lz: float, rot_y: float) -> void:
 	body.add_child(inst)
 	_detail_furniture(inst)
 	add_child(body)
-	var ab := _aabb_of(inst)
-	if ab.size == Vector3.ZERO:
-		return
-	var cs := CollisionShape3D.new()
-	var shp := BoxShape3D.new()
-	shp.size = ab.size
-	cs.shape = shp
-	cs.position = ab.position + ab.size * 0.5
-	body.add_child(cs)
+	# Exact per-mesh trimesh collision. The old single merged-AABB box topped out
+	# at the piece's TALLEST mesh, so "standing on" a couch seat floated you at
+	# backrest height and wall-stick/shot rays hit invisible box air.
+	_collide_meshes(body, inst)
+
+
+## One trimesh CollisionShape3D per MeshInstance3D under `root`, so collision
+## matches the visible geometry exactly (seat vs backrest, table top vs legs).
+func _collide_meshes(body: StaticBody3D, root: Node3D) -> void:
+	var stack: Array = [root]
+	while not stack.is_empty():
+		var n = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		if n is MeshInstance3D and n.mesh != null:
+			var cs := CollisionShape3D.new()
+			cs.shape = n.mesh.create_trimesh_shape()
+			body.add_child(cs)
+			cs.global_transform = n.global_transform
 
 
 func _rug(piece: String, cx: float, cz: float) -> void:

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://q0climbwedge0"]
+
+[ext_resource type="Script" path="res://scripts/dev/climb_wedge_test.gd" id="1_cw"]
+
+[node name="ClimbWedgeTest" type="Node3D"]
+script = ExtResource("1_cw")

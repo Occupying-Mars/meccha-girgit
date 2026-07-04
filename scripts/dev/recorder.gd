@@ -238,8 +238,11 @@ func _net_shoot() -> void:
 		push_warning("[recorder] net_shoot: need a seeker and a hider")
 		return
 	print("[recorder] net_shoot seeker@%s hider@%s" % [seeker.global_position, hider.global_position])
-	# Aim the seeker's camera yaw at the hider's torso, then fire.
-	seeker._yaw.look_at(hider.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+	# Aim the seeker's camera yaw at the hider's torso, then fire. Torso height
+	# scales with the body (hiders are 0.34x) — the old fixed +1.0 aimed OVER
+	# the shrunken hider's head and always missed.
+	var torso_h: float = 1.08 * hider.body.scale.y
+	seeker._yaw.look_at(hider.global_position + Vector3(0, torso_h, 0), Vector3.UP)
 	await get_tree().process_frame
 	await get_tree().physics_frame
 	seeker._fire()
@@ -469,6 +472,16 @@ func _net_caught() -> void:
 	for p in players.get_children():
 		if p.is_multiplayer_authority():
 			print("[recorder] net_caught: local hider ", p.name, " caught=", p.caught)
+			# Caught hiders may still ROAM (revealed red, but free to walk):
+			# drive forward for a moment and measure the displacement.
+			var start: Vector3 = p.global_position
+			Input.action_press("move_forward")
+			await get_tree().create_timer(1.5).timeout
+			Input.action_release("move_forward")
+			var moved: float = (p.global_position - start).length()
+			var c: Color = p.body.get_part_color("torso")
+			print("[recorder] net_caught: roamed %.2f m while caught; torso=(%.2f,%.2f,%.2f)"
+				% [moved, c.r, c.g, c.b])
 
 
 func _net_check() -> void:

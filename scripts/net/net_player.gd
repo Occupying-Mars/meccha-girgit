@@ -19,8 +19,11 @@ const SEEKER_SPEED := 5.0
 ## Once stuck you only adjust height (raise/lower) to line up with a frame/
 ## shelf; you don't free-climb. Release to detach (MECCHA behaviour).
 const STICK_RANGE := 2.2    # forgiving reach; sticking snaps you flush anyway
-const WALL_OFFSET := 0.09   # body half-depth so the model sits against the wall
-const WALL_VSPEED := 1.1    # raise/lower speed while stuck
+## FULL-SIZE flattened body half-depth (torso r 0.23 x wall_flatten z-scale 0.38).
+## Always used via _stick_offset(), which multiplies by the avatar's scale — the
+## raw constant on a 0.34-scale hider left a ~6 cm air gap against the wall.
+const WALL_OFFSET := 0.09
+const WALL_VSPEED := 1.1    # climb/strafe speed while stuck
 
 @export var move_speed: float = 4.0
 @export var mouse_sensitivity: float = 0.0025
@@ -34,6 +37,14 @@ const PAINT_MENU := preload("res://scenes/ui/freehand_paint_menu.tscn")
 const POSE_MENU := preload("res://scenes/ui/pose_menu.tscn")
 const SEEKER_HUD := preload("res://scenes/ui/net_seeker_hud.tscn")
 const PAUSE_MENU := preload("res://scenes/ui/pause_menu.tscn")
+## First-person shotgun viewmodel (seeker only, local-only cosmetic).
+const GUN_MODEL := preload("res://assets/weapons/meccha/shotgun.glb")
+## Camera-space placement of the viewmodel: lower-right, angled slightly inward,
+## barrel forward. Tuned so it reads as "holding a shotgun" without filling the
+## screen. (position, euler degrees, uniform scale.)
+const GUN_VM_POS := Vector3(0.22, -0.22, -0.35)
+const GUN_VM_ROT := Vector3(0.0, 180.0, 0.0)
+const GUN_VM_SCALE := 0.5
 
 enum Role { HIDER, SEEKER }
 
@@ -61,6 +72,7 @@ var _paint_menu: FreehandPaintMenu
 var _pose_menu: PoseMenu
 var _menu_open: bool = false
 var _seeker_hud: CanvasLayer
+var _gun_viewmodel: Node3D
 var _pause_menu: PauseMenu
 var _pause_open: bool = false
 var caught: bool = false
@@ -117,6 +129,7 @@ func _ready() -> void:
 		if is_seeker():
 			_seeker_hud = SEEKER_HUD.instantiate()
 			add_child(_seeker_hud)
+			_add_gun_viewmodel()
 		else:
 			_setup_menus()
 		var controls := ControlsHud.new()
@@ -152,6 +165,7 @@ func _configure_role() -> void:
 		_collision.position.y = 0.85
 		_collision.disabled = false
 		body.scale = Vector3.ONE
+		body.position.y = -0.04 * body.scale.y  # leg tips touch the floor exactly
 		# Shots should land on the VISIBLE painted body, so cast against the paint
 		# trimesh (matches the mesh, and works even while a hider is wall-stuck and
 		# their movement capsule is disabled) + the world. Exclude our own capsule
@@ -161,10 +175,12 @@ func _configure_role() -> void:
 		_muzzle.add_exception(self)
 		for sb in _own_static_bodies():
 			_muzzle.add_exception(sb)
+		_add_gun_thirdperson()  # gun on the body — hiders see the seeker is armed
 	else:
 		add_to_group("hider")
 		move_speed = HIDER_SPEED
 		body.scale = Vector3.ONE * HIDER_SCALE
+		body.position.y = -0.04 * body.scale.y  # leg tips touch the floor exactly
 		# Size the capsule DIRECTLY — node scale on a CollisionShape3D is often
 		# ignored by the physics server, which left the tiny hider floating a
 		# full-size radius off every wall.
@@ -291,7 +307,10 @@ func _physics_process(delta: float) -> void:
 	if not _is_mine:
 		return  # remote: position/rotation come from the synchronizer
 	_update_camera_arm(delta)
-	if _menu_open or _pause_open or caught or not _can_act():
+	# NOTE: `caught` does NOT freeze movement — a caught hider may still roam
+	# (revealed red, scored as caught, but free to walk around). Abilities
+	# (whistle/stick/menus) stay blocked in _process.
+	if _menu_open or _pause_open or not _can_act():
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()
@@ -362,9 +381,10 @@ func _try_stick() -> void:
 		return
 	_stuck = true
 	_wall_normal = best["normal"]
-	# Snap so the (un-squeezed) model sits against the wall, keep height.
+	# Snap so the FLATTENED model's back touches the wall, keep height. The
+	# offset scales with the avatar (hiders are 0.34x) — see WALL_OFFSET note.
 	var p := best["position"] as Vector3
-	global_position = Vector3(p.x, global_position.y, p.z) + _wall_normal * WALL_OFFSET
+	global_position = Vector3(p.x, global_position.y, p.z) + _wall_normal * _stick_offset()
 	_stick_y = global_position.y
 	# Face out from the wall; the model keeps its current pose (no squeezing).
 	body.rotation.y = atan2(_wall_normal.x, _wall_normal.z)
@@ -399,11 +419,96 @@ func _wall_adjust(delta: float) -> void:
 	velocity = Vector3.ZERO
 	if v > 0.0:
 		if not _wall_present_at(global_position.y + _body_top()):
+			# Cleared the wall's top edge — if there's a standable ledge just past
+			# it (crate/furniture/thick wall), MANTLE onto it; else cap the climb.
+			if _try_mantle():
+				return
 			v = 0.0
 		elif not _clear_above(_camera_reach()):
 			v = 0.0
 	var hi := _stick_y + 6.0
 	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, hi)
+
+	# Sideways along the wall face (A/D = screen left/right). Probe the wall at
+	# the target spot and RE-SNAP flush to the fresh hit, so slightly angled
+	# surfaces stay gapless; if the probe misses (wall edge/corner) don't move.
+	var h := Input.get_axis("move_left", "move_right")
+	if absf(h) > 0.001:
+		var tangent := _wall_normal.cross(Vector3.UP).normalized()
+		if tangent.dot(_yaw.global_transform.basis.x) < 0.0:
+			tangent = -tangent  # "right" is always screen-right, whatever the wall faces
+		var np := global_position + tangent * (h * WALL_VSPEED * delta)
+		var hit := _wall_hit(Vector3(np.x, np.y + 0.3 * body.scale.y, np.z))
+		if not hit.is_empty():
+			_wall_normal = hit["normal"]
+			var wp := hit["position"] as Vector3
+			global_position = Vector3(wp.x, np.y, wp.z) + _wall_normal * _stick_offset()
+			body.rotation.y = atan2(_wall_normal.x, _wall_normal.z)
+
+
+## Wall-snap distance for THIS avatar: full-size flattened half-depth times the
+## body's scale (hiders are 0.34x — the unscaled constant left a visible gap),
+## plus 5 mm so the torso's back face never z-fights the wall surface.
+func _stick_offset() -> float:
+	return WALL_OFFSET * body.scale.z + 0.005
+
+
+## Ray from `from` toward the stuck wall; {} if nothing wall-like is there
+## (used for lateral strafing and edge detection while stuck).
+func _wall_hit(from: Vector3) -> Dictionary:
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(from, from - _wall_normal * (_stick_offset() + 0.6))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	var hit := space.intersect_ray(q)
+	if hit.is_empty() or absf((hit["normal"] as Vector3).y) > 0.5:
+		return {}
+	return hit
+
+
+## Climb over the top edge: when the wall ahead is gone at head height, look for
+## a flat, standable ledge just beyond the edge and pop up onto it. This is how
+## hiders get ON TOP of crates/furniture. Perimeter walls stay unclimbable —
+## there's no floor within reach beyond them, so the probe simply misses.
+func _try_mantle() -> bool:
+	var space := get_world_3d().direct_space_state
+	var in_depth := 0.18 + 0.25 * body.scale.x  # land far enough in to stand
+	var over := global_position - _wall_normal * (_stick_offset() + in_depth)
+	var top_y := global_position.y + _body_top() + 0.1
+	var q := PhysicsRayQueryParameters3D.create(
+		Vector3(over.x, top_y, over.z),
+		Vector3(over.x, top_y - _body_top() - 0.5, over.z))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	var hit := space.intersect_ray(q)
+	if hit.is_empty() or (hit["normal"] as Vector3).y < 0.7:
+		return false  # nothing flat to stand on just past the edge
+	var ledge := hit["position"] as Vector3
+	if not _fits_standing(ledge):
+		return false  # a body wouldn't fit up there (shelf under a low ceiling…)
+	_stuck = false
+	_collision.disabled = false
+	_wall_normal = Vector3.ZERO
+	global_position = ledge + Vector3(0, 0.02, 0)
+	velocity = Vector3.ZERO
+	body.rotation.y = 0.0
+	body.apply_pose("stand", false)
+	_broadcast_pose("stand")
+	return true
+
+
+## Does a standing body of OUR size fit at `pos` (feet position)?
+func _fits_standing(pos: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.25 * body.scale.x
+	shape.height = 1.7 * body.scale.y
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	q.transform = Transform3D(Basis(), pos + Vector3(0, 0.85 * body.scale.y + 0.05, 0))
+	return space.intersect_shape(q, 1).is_empty()
 
 
 ## Top of the visible body above the feet (head sphere tops at ~1.74 body-local,
@@ -530,23 +635,70 @@ func _wall_between(a: Vector3, b: Vector3) -> bool:
 
 ## --- Paint / pose replication (RPC, reliable, on lock-in) --------------------
 ## Paint is set rarely and locked in during prep, so we replicate it once via
-## a reliable RPC instead of streaming it. The owner broadcasts; receivers
-## apply it to this same player node (routed by its peer-id name).
-## NOTE: a peer joining mid-prep won't get paint applied earlier; late-join
-## state sync is a planned follow-up.
+## reliable RPCs instead of streaming it.
+##
+## CHUNKED: the paint state (six per-part 256x256 PNGs) serializes to ~3-200 KB.
+## ENet fragments big reliable packets transparently, but the EOS transport
+## hard-caps a packet at EOS_P2P_MAX_PACKET_SIZE (1170 B) and gd-eos does NOT
+## fragment — a single big RPC never left the sender in internet matches, which
+## is why the seeker saw an unpainted white hider while tiny pose RPCs worked.
+## So: serialize once, slice into <=1 KB chunks, reassemble on receivers.
+
+const PAINT_CHUNK := 1000  # bytes/chunk; stays under EOS's 1170 B packet cap
+
+var _paint_tx_id := 0        # our own transfer counter (sender side)
+var _paint_rx: Dictionary = {}  # sender id -> {id, total, chunks: {seq: bytes}}
+
 
 func _broadcast_paint() -> void:
 	if _is_mine:
-		_receive_paint.rpc(body.get_paint_state())
+		_send_paint_state(body.get_paint_state(), 0)
+
+
+## Send the paint state to `to_peer` (0 = everyone) in reliable ordered chunks.
+## Also used by the HOST to relay this avatar's paint to a late joiner.
+func _send_paint_state(state: Dictionary, to_peer: int) -> void:
+	var bytes := var_to_bytes(state)
+	_paint_tx_id += 1
+	var total := int(ceil(float(bytes.size()) / float(PAINT_CHUNK)))
+	for i in total:
+		var chunk := bytes.slice(i * PAINT_CHUNK, mini((i + 1) * PAINT_CHUNK, bytes.size()))
+		if to_peer == 0:
+			_receive_paint_chunk.rpc(_paint_tx_id, i, total, chunk)
+		else:
+			_receive_paint_chunk.rpc_id(to_peer, _paint_tx_id, i, total, chunk)
+
+
+## Accepted from this avatar's OWNER (painting itself) or from the HOST
+## (relaying state to a late joiner) — same trust model as sync_full_state.
+@rpc("any_peer", "call_remote", "reliable")
+func _receive_paint_chunk(xid: int, seq: int, total: int, chunk: PackedByteArray) -> void:
+	var sender := multiplayer.get_remote_sender_id()
+	if sender != get_multiplayer_authority() and sender != 1:
+		return
+	if total <= 0 or total > 2000 or seq < 0 or seq >= total:
+		return
+	var entry: Dictionary = _paint_rx.get(sender, {})
+	if entry.get("id", -1) != xid:
+		entry = {"id": xid, "total": total, "chunks": {}}
+	entry["chunks"][seq] = chunk
+	_paint_rx[sender] = entry
+	if entry["chunks"].size() < total:
+		return
+	# Complete — reassemble in order and apply.
+	_paint_rx.erase(sender)
+	var bytes := PackedByteArray()
+	for i in total:
+		bytes.append_array(entry["chunks"][i])
+	var state = bytes_to_var(bytes)  # plain data only (no objects) — safe
+	if typeof(state) == TYPE_DICTIONARY:
+		body.apply_paint_state(state)
+
 
 func _broadcast_pose(pose_name: String) -> void:
 	if _is_mine:
 		_receive_pose.rpc(pose_name)
 
-
-@rpc("authority", "call_remote", "reliable")
-func _receive_paint(state: Dictionary) -> void:
-	body.apply_paint_state(state)
 
 @rpc("authority", "call_remote", "reliable")
 func _receive_pose(pose_name: String) -> void:
@@ -597,6 +749,71 @@ func _whistle_popup() -> void:
 	tw.tween_property(note, "position:y", 1.4, 0.8)
 	tw.tween_property(note, "modulate:a", 0.0, 0.8)
 	tw.chain().tween_callback(note.queue_free)
+
+
+## Third-person shotgun on the seeker's body — created on EVERY peer so hiders see
+## the seeker carrying it. On the seeker's OWN machine it's parented to the body,
+## which is hidden locally (the seeker uses the first-person viewmodel instead), so
+## it only ever shows to other players. Idempotent (become_seeker re-configures).
+var _gun_thirdperson: Node3D
+const GUN_TP_POS := Vector3(0.32, 0.95, -0.25)
+const GUN_TP_ROT := Vector3(0.0, 180.0, 0.0)
+const GUN_TP_SCALE := 0.9
+func _add_gun_thirdperson() -> void:
+	if _gun_thirdperson != null:
+		return
+	_gun_thirdperson = GUN_MODEL.instantiate()
+	body.add_child(_gun_thirdperson)
+	_gun_thirdperson.position = GUN_TP_POS
+	_gun_thirdperson.rotation_degrees = GUN_TP_ROT
+	_gun_thirdperson.scale = Vector3.ONE * GUN_TP_SCALE
+	for c in _gun_thirdperson.find_children("*", "GeometryInstance3D"):
+		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## First-person shotgun viewmodel — a local-only cosmetic for the seeker who owns
+## this avatar. Created only on the owning peer, so it never shows floating on the
+## seeker's head from another player's view (their machine has no such node).
+## Includes a simple chameleon-style blob hand + forearm gripping the gun.
+func _add_gun_viewmodel() -> void:
+	if _gun_viewmodel != null:
+		return
+	# Hide the seeker's OWN body in first person (local only — other players still
+	# see the seeker's blob). Otherwise the camera, sitting at head height, stares
+	# straight into the seeker's own shoulders/arms as big blobs.
+	body.visible = false
+	_gun_viewmodel = GUN_MODEL.instantiate()
+	_camera.add_child(_gun_viewmodel)
+	_gun_viewmodel.position = GUN_VM_POS
+	_gun_viewmodel.rotation_degrees = GUN_VM_ROT
+	_gun_viewmodel.scale = Vector3.ONE * GUN_VM_SCALE
+	# Don't let the barrel cast a big shadow across the seeker's own view.
+	for c in _gun_viewmodel.find_children("*", "GeometryInstance3D"):
+		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_add_gun_hand()
+
+
+## Blob hand + forearm gripping the shotgun (chameleon style — a rounded mitt, no
+## fingers), attached to the camera alongside the gun so it reads as "held".
+const GUN_HAND_COLOR := Color(0.94, 0.94, 0.95)  # white blob mitt
+func _add_gun_hand() -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = GUN_HAND_COLOR
+	mat.roughness = 0.6
+	var hand := MeshInstance3D.new()
+	var hs := SphereMesh.new(); hs.radius = 0.06; hs.height = 0.12
+	hand.mesh = hs
+	hand.material_override = mat
+	hand.position = Vector3(0.2, -0.24, -0.42)
+	var arm := MeshInstance3D.new()
+	var ac := CapsuleMesh.new(); ac.radius = 0.055; ac.height = 0.4
+	arm.mesh = ac
+	arm.material_override = mat
+	arm.position = Vector3(0.3, -0.42, -0.3)
+	arm.rotation_degrees = Vector3(62, 8, 30)
+	for m in [hand, arm]:
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_camera.add_child(m)
 
 
 ## --- Seeker gun + elimination -----------------------------------------------
@@ -681,8 +898,13 @@ func _apply_caught() -> void:
 	if caught:
 		return
 	caught = true
+	# Revealed: flash red on EVERY peer (this runs via a call_local broadcast) and
+	# drop any hide pose — a caught hider stands up and may roam freely.
 	for part_name in body.part_names():
 		body.set_part_color(part_name, Color(0.9, 0.1, 0.1))
+	if _stuck and _is_mine:
+		_unstick()  # re-enables the movement capsule so roaming works
+	body.apply_pose("stand", false)
 	print("[net_player] caught: ", name)
 
 
@@ -724,17 +946,17 @@ func become_seeker() -> void:
 		if _seeker_hud == null:
 			_seeker_hud = SEEKER_HUD.instantiate()
 			add_child(_seeker_hud)
+		_add_gun_viewmodel()  # newly-infected seeker gets the shotgun too
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-## Host-only: push this avatar's full current state to a late joiner so it
-## sees paint/pose/caught that happened before it connected. Goes through the
-## same get/apply_paint_state path, so it survives the freehand-paint upgrade.
+## Host-only: push this avatar's pose/caught to a late joiner so it sees state
+## from before it connected. Paint is NOT carried here — it can be far larger
+## than an EOS packet, so the host relays it via _send_paint_state (chunked).
 @rpc("any_peer", "call_remote", "reliable")
-func sync_full_state(paint: Dictionary, pose_name: String, is_caught: bool) -> void:
+func sync_full_state(pose_name: String, is_caught: bool) -> void:
 	if multiplayer.get_remote_sender_id() != 1:
 		return
-	body.apply_paint_state(paint)
 	body.apply_pose(pose_name, false)
 	if is_caught:
 		_apply_caught()

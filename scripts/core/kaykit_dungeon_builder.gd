@@ -300,15 +300,19 @@ func _solid(piece: String, pos: Vector3, rot_y: float) -> void:
 	var inst: Node3D = P[piece].instantiate()
 	body.add_child(inst)  # visual lives UNDER the collider so the eyedropper ray
 	add_child(body)       # finds the mesh to sample its exact surface color
-	var ab := _aabb_of(inst)
-	if ab.size == Vector3.ZERO:
-		return
-	var cs := CollisionShape3D.new()
-	var shp := BoxShape3D.new()
-	shp.size = ab.size
-	cs.shape = shp
-	cs.position = ab.position + ab.size * 0.5  # AABB center in the piece's local frame
-	body.add_child(cs)
+	# Exact per-mesh trimesh collision — a single merged-AABB box put the
+	# walkable top at the piece's TALLEST point (float-on-air gap when standing
+	# on crates/props whose visual top sits below their bounding box).
+	var stack: Array = [inst]
+	while not stack.is_empty():
+		var n = stack.pop_back()
+		for c in n.get_children():
+			stack.push_back(c)
+		if n is MeshInstance3D and n.mesh != null:
+			var cs := CollisionShape3D.new()
+			cs.shape = n.mesh.create_trimesh_shape()
+			body.add_child(cs)
+			cs.global_transform = n.global_transform
 
 
 # Combined AABB of all MeshInstance3D under `node`, in node-local space.

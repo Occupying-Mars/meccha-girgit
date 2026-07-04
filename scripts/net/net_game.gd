@@ -322,6 +322,18 @@ func _start_session_mode() -> void:
 		multiplayer.peer_connected.connect(_on_peer_connected)
 	else:
 		GameState.authoritative = false
+		# Session-mode joiners connected while still in the MENU, so the CLI
+		# path's connected_to_server hook never fires here — a mid-round joiner
+		# (dedicated server / rejoin) silently missed everyone's paint/pose/
+		# caught. Ask the host once our scene is up; in the lobby there are no
+		# avatars yet, so the replay is simply empty and harmless.
+		_late_join_state_request()
+
+
+func _late_join_state_request() -> void:
+	await get_tree().create_timer(1.0).timeout  # let spawner replication settle
+	if is_inside_tree() and NetSession.active and not multiplayer.is_server():
+		_request_full_state.rpc_id(1)
 
 
 func _start_cli_mode() -> void:
@@ -412,7 +424,9 @@ func _request_full_state() -> void:
 		if p.name == str(who):
 			continue  # the joiner's own avatar is still blank
 		# Host's copy already has each player's broadcast paint/pose/caught.
-		p.sync_full_state.rpc_id(who, p.body.get_paint_state(), p.body.current_pose, p.caught)
+		# Pose+caught ride one small RPC; paint goes CHUNKED (EOS packet cap).
+		p.sync_full_state.rpc_id(who, p.body.current_pose, p.caught)
+		p._send_paint_state(p.body.get_paint_state(), who)
 	print("[net] replayed state to late joiner ", who)
 
 
