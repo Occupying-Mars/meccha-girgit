@@ -168,6 +168,16 @@ func _run_test_async() -> void:
 			# Host LAN in DECIDED mode and hold in the lobby (no auto-start) so the
 			# lobby overlay — incl. the seeker-assignment toggle — can be captured.
 			_lobby_show()
+		"wall_climb":
+			# (CLI --server --ashider) stick to the nearest wall and climb, then
+			# report how high the hider rose — used to verify tall-wall climbing.
+			_wall_climb_test()
+		"aim_set":
+			# (host/seeker) aim toward world +X and hold, reporting the body yaw.
+			_aim_set()
+		"aim_read":
+			# (client/hider) report where the REMOTE seeker's body is facing.
+			_aim_read()
 		"eos_host":
 			# Host over EOS; write the assigned lobby code to a scratch file so
 			# a separate eos_join process (same machine, --test only) can read it.
@@ -412,6 +422,96 @@ func _lobby_show() -> void:
 	NetSession.selected_map = "arena"  # light map so the lobby is up fast
 	NetSession.host_game("HostUser", NetSession.Mode.DECIDED)
 	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+
+
+func _wall_climb_test() -> void:
+	await get_tree().create_timer(2.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	var p = null
+	for c in players.get_children():
+		if c.is_multiplayer_authority() and not c.is_seeker():
+			p = c
+	if p == null:
+		print("[recorder] wall_climb: no local hider (run with --ashider)"); return
+	# Find the TALLEST wall around the hider (measure how high the wall face runs)
+	# and teleport ~0.8 m off it — that's the case the user means by "climb the wall".
+	var space: PhysicsDirectSpaceState3D = p.get_world_3d().direct_space_state
+	var from: Vector3 = p.global_position + Vector3(0, 0.4, 0)
+	var best := {}
+	var best_top := -1.0
+	for i in 48:
+		var ang := TAU * float(i) / 48.0
+		var dir := Vector3(sin(ang), 0.0, cos(ang))
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * 12.0)
+		q.exclude = [p.get_rid()]
+		q.collision_mask = 1
+		var hit := space.intersect_ray(q)
+		if hit.is_empty() or absf((hit["normal"] as Vector3).y) > 0.5:
+			continue
+		var n: Vector3 = hit["normal"]
+		var spot: Vector3 = (hit["position"] as Vector3) + n * 0.8
+		# March up the wall face: highest y where the wall is still present = its top.
+		var top := 0.0
+		for step in 30:
+			var y := 0.5 + float(step) * 0.5
+			var wq := PhysicsRayQueryParameters3D.create(
+				Vector3(spot.x, y, spot.z), Vector3(spot.x, y, spot.z) - n * 1.4)
+			wq.exclude = [p.get_rid()]
+			wq.collision_mask = 1
+			if space.intersect_ray(wq).is_empty():
+				break
+			top = y
+		if top > best_top:
+			best_top = top
+			best = hit
+	if best.is_empty():
+		print("[recorder] wall_climb: no wall found near hider"); return
+	print("[recorder] wall_climb: tallest wall face runs to y=%.1f" % best_top)
+	p.global_position = (best["position"] as Vector3) + (best["normal"] as Vector3) * 0.8
+	await get_tree().physics_frame
+	p._try_stick()
+	await get_tree().physics_frame
+	if not p._stuck:
+		print("[recorder] wall_climb: stick FAILED"); return
+	var stick_y: float = p.global_position.y
+	Input.action_press("jump")  # hold to climb up the wall face
+	await get_tree().create_timer(10.0).timeout
+	Input.action_release("jump")
+	var top_y: float = p.global_position.y
+	# On an open wall the hider should climb (near) the full face; a low-ceiling
+	# map caps earlier by design. `mantled` = climbed over the top onto a ledge.
+	print("[recorder] wall_climb: stuck y=%.2f -> y=%.2f  (rise=%.2f m, mantled=%s)"
+		% [stick_y, top_y, top_y - stick_y, str(not p._stuck)])
+
+
+func _aim_set() -> void:
+	await get_tree().create_timer(3.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if p.is_multiplayer_authority() and p.is_seeker():
+			p._yaw.rotation.y = -PI / 2.0  # camera -Z points toward world +X
+			await get_tree().physics_frame
+			await get_tree().physics_frame
+			var aim: Vector3 = -p._yaw.global_transform.basis.z
+			print("[recorder] aim_set: seeker AIMS dir=(%.2f,%.2f) body.rot.y=%.2f"
+				% [aim.x, aim.z, p.body.rotation.y])
+	await get_tree().create_timer(7.0).timeout
+
+
+func _aim_read() -> void:
+	await get_tree().create_timer(7.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	for p in players.get_children():
+		if p.is_seeker():  # the remote seeker on this client
+			var front: Vector3 = p.body.global_transform.basis.z  # body front is +Z
+			print("[recorder] aim_read: client sees seeker body.rot.y=%.2f front=(%.2f,%.2f)"
+				% [p.body.rotation.y, front.x, front.z])
 
 
 func _eos_host() -> void:

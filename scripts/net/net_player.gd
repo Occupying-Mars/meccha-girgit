@@ -341,7 +341,17 @@ func _physics_process(delta: float) -> void:
 	if global_position.y < -6.0:
 		_respawn_inside()
 
-	if move.length() > 0.1:
+	# Body facing (this is what the MultiplayerSynchronizer replicates, so it's
+	# how EVERYONE ELSE sees this avatar oriented — and where the third-person
+	# gun points). Seekers face where they AIM (their look yaw), so a hider sees
+	# the seeker looking exactly where the seeker really is; the seeker's own
+	# aim wasn't synced before, so a standing seeker never turned on the hider's
+	# screen. Hiders keep facing their movement direction. atan2(dir.x, dir.z)
+	# matches the existing movement-facing convention, so no rotation offset.
+	if is_seeker():
+		var aim := -_yaw.global_transform.basis.z
+		body.rotation.y = atan2(aim.x, aim.z)
+	elif move.length() > 0.1:
 		var target_yaw := atan2(move.x, move.z)
 		body.rotation.y = lerp_angle(body.rotation.y, target_yaw, 0.2)
 
@@ -398,19 +408,18 @@ func _try_stick() -> void:
 
 
 func _wall_adjust(delta: float) -> void:
-	# Climb freely UP the wall face. Two independent limits, both must pass:
-	#  1) HEAD vs the wall: check the wall is still there at head height, so
-	#     you can never climb OVER a wall (feet-only checks let the model poke
-	#     out above the roof at max climb).
-	#  2) CAMERA vs the ceiling: on maps where the ceiling sits right at the
-	#     wall's own height (e.g. backrooms), reaching the head cap in (1)
-	#     still leaves the ORBITING CAMERA — mounted above the yaw pivot, further
-	#     out via the spring arm — high enough to poke INSIDE the ceiling slab.
-	#     A ray embedded in solid geometry hits nothing in any direction (rays
-	#     don't register against the shape they start inside), which is exactly
-	#     the "outside the map, seeing a blank void" bug. So before climbing,
-	#     also check straight up for the camera's full possible reach
-	#     (yaw pivot height + the whole spring arm length + a margin).
+	# Climb freely UP the wall face. The climb is limited so you can't pop over a
+	# roof or push the camera into a ceiling — but those checks must NOT choke a
+	# genuinely tall wall (e.g. Sponza, whose walls run many metres up and have
+	# window openings), which is what capped the climb at half height:
+	#  1) HEAD vs the wall — stop only at the real TOP. If the wall merely has a
+	#     window/opening at head height it RESUMES above, so keep climbing;
+	#     mantle onto a ledge if one's there; only cap when the wall truly ends.
+	#  2) HEAD vs a ceiling — stop only when a ceiling is right above the head
+	#     (low-ceiling maps like backrooms). The head (camera pivot) stays below
+	#     it, so the camera-arm ray still resolves and the old "camera embedded in
+	#     the ceiling slab → blank void" bug can't happen. (The previous check used
+	#     the camera's full reach, which a high Sponza arch tripped far too early.)
 	var v := 0.0
 	if Input.is_action_pressed("jump") or Input.is_action_pressed("move_forward"):
 		v += 1.0
@@ -418,15 +427,19 @@ func _wall_adjust(delta: float) -> void:
 		v -= 1.0
 	velocity = Vector3.ZERO
 	if v > 0.0:
-		if not _wall_present_at(global_position.y + _body_top()):
-			# Cleared the wall's top edge — if there's a standable ledge just past
-			# it (crate/furniture/thick wall), MANTLE onto it; else cap the climb.
-			if _try_mantle():
+		var head_y := global_position.y + _body_top()
+		if not _wall_present_at(head_y):
+			# Wall's gone at head height. Window/opening (it resumes above)? keep
+			# going. A standable ledge past it? mantle. Otherwise it's the top: cap.
+			if _wall_present_at(head_y + 0.8) or _wall_present_at(head_y + 1.6):
+				pass
+			elif _try_mantle():
 				return
+			else:
+				v = 0.0
+		elif _low_ceiling_map() and not _headroom_clear(0.4):
 			v = 0.0
-		elif not _clear_above(_camera_reach()):
-			v = 0.0
-	var hi := _stick_y + 6.0
+	var hi := _stick_y + 20.0  # generous; the wall-top check is the real limiter
 	global_position.y = clampf(global_position.y + v * WALL_VSPEED * delta, 0.1, hi)
 
 	# Sideways along the wall face (A/D = screen left/right). Probe the wall at
@@ -517,12 +530,6 @@ func _body_top() -> float:
 	return 1.8 * body.scale.y
 
 
-## How high above the feet the orbiting camera can possibly reach (yaw pivot
-## height + the full spring arm length + a small margin), regardless of pitch.
-func _camera_reach() -> float:
-	return _yaw.position.y + _arm_max + 0.3
-
-
 ## Manual third-person camera obstruction with smoothing. The stock SpringArm3D
 ## snaps the camera the instant its cast result changes — e.g. the frame a jump
 ## clears the furniture behind you — which reads as a sudden zoom glitch.
@@ -564,10 +571,22 @@ func _wall_present_at(check_y: float) -> bool:
 
 ## True if there's clear space straight up from the feet for `height` — used to
 ## stop climbing before the camera's reach can poke into a ceiling above.
-func _clear_above(height: float) -> bool:
+## Does the current map have a low flat ceiling at wall height? Only then do we
+## cap wall-climbs on headroom (open/ornate maps like Sponza climb the full wall).
+func _low_ceiling_map() -> bool:
+	var scene := get_tree().current_scene
+	return scene != null and "low_ceiling" in scene and scene.low_ceiling
+
+
+## Is there real headroom to keep climbing — i.e. no ceiling/overhang within
+## `margin` right above the head? Probe from just above the head, offset OUT from
+## the wall, so we test the OPEN SPACE in front of the wall rather than the wall's
+## own carved surface (Sponza's base mouldings sit proud of the face and, probed
+## from flush against it, read as a ceiling — which capped the climb instantly).
+func _headroom_clear(margin: float) -> bool:
 	var space := get_world_3d().direct_space_state
-	var from := global_position
-	var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(0, height, 0))
+	var from := global_position + Vector3(0, _body_top(), 0) + _wall_normal * 0.25
+	var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(0, margin, 0))
 	q.exclude = [get_rid()]
 	q.collision_mask = 1
 	return space.intersect_ray(q).is_empty()

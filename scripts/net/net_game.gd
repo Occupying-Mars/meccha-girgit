@@ -30,6 +30,9 @@ const MAPS := {
 		"spawn": Vector3(-10.5, 0.4, 0.0),
 		"ambient": 0.85, "sun": 0.5, "exposure": 1.0,
 		"probe_size": Vector3(43, 4, 36), "probe_pos": Vector3(0, 1.5, 0), "probe_interior": true,
+		# Low flat ceiling right at wall height — cap wall-climbs at head height so
+		# the orbit camera can't poke through it (see net_player _headroom_clear).
+		"low_ceiling": true,
 	},
 	"warehouse": {
 		"label": "Warehouse",
@@ -54,6 +57,7 @@ const MAPS := {
 		"ambient": 0.55, "sun": 1.0, "exposure": 1.0, "ssil": true,
 		"warm_ambient": Color(0.50, 0.47, 0.44),
 		"probe_size": Vector3(25, 5, 17), "probe_pos": Vector3(0, 2, 0), "probe_interior": true,
+		"low_ceiling": true,  # roofed interior — cap wall-climbs at head height
 	},
 	"arena": {
 		"label": "Test Arena",
@@ -88,6 +92,9 @@ const VIEW_HALF_COS := 0.5  # ~60° half-cone
 
 var _started: bool = false
 var _built_map: String = ""
+## True on maps with a low flat ceiling at wall height (backrooms/house) — read
+## by net_player to cap wall-climbs so the orbit camera can't poke the ceiling.
+var low_ceiling: bool = false
 
 
 func _ready() -> void:
@@ -183,6 +190,9 @@ func _build_map(map_id: String) -> void:
 	if info.has("require") and not ResourceLoader.exists(info["require"]):
 		push_warning("[net] map '%s' assets missing — using arena" % map_id)
 		info = MAPS["arena"]
+	# Wall-climb ceiling cap is only needed on low, flat-ceiling interiors — on
+	# open/ornate maps (Sponza) it would false-trip on cornices and stop climbs.
+	low_ceiling = info.get("low_ceiling", false)
 	var node := Node3D.new()
 	node.name = "Map"
 	node.set_script(load(info["script"]))
