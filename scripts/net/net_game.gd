@@ -61,6 +61,15 @@ const MAPS := {
 		"spawn": Vector3(-5.0, 0.1, 6.0),
 		"ambient": 0.6, "sun": 1.0, "exposure": 1.0,
 	},
+	"bluehour": {
+		"label": "Blue Hour (cliffside)",
+		"script": "res://scripts/core/bluehour_builder.gd",
+		"spawn": Vector3(-6.0, 6.6, 0.0),
+		# Builder overrides the environment for the storm mood a frame later;
+		# these are just the pre-mood values so nothing flashes bright first.
+		"ambient": 0.9, "sun": 0.45, "exposure": 0.92,
+		"probe_size": Vector3(48, 20, 34), "probe_pos": Vector3(-6, 6, 0),
+	},
 }
 ## Scoring: hiders earn points while visible to a seeker; closer = faster.
 const VIS_RANGE := 30.0
