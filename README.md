@@ -131,6 +131,26 @@ downloads that build gets one-click internet hosting. Anyone who clones the
 *source* instead won't have EOS until they add their own Epic app secret, but LAN
 / direct / dedicated all still work for them without it.
 
+### Running a downloaded build (unsigned-app warnings)
+
+These are indie builds with no Apple/Microsoft developer signature, so both OSes
+throw an "unknown publisher" warning the first time. That's expected — not a
+sign anything's wrong with the build.
+
+**macOS:** unzip, then clear the quarantine flag once from Terminal:
+
+```bash
+xattr -cr meccha-girgit.app
+```
+
+(drag the `.app` onto the Terminal window after typing `xattr -cr ` to paste its
+path, or `cd` to the folder it's in first). Then double-click it normally. If you
+skip this, macOS reports it as "damaged and can't be opened" — that's Gatekeeper
+blocking an unsigned app, not actual file corruption.
+
+**Windows:** SmartScreen shows "Windows protected your PC" — click **More info →
+Run anyway**.
+
 ### A note on EOS credentials
 
 `scripts/net/eos_net.gd` ships with the four **public** EOS identifiers (Product,
