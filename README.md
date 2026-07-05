@@ -45,8 +45,8 @@ a gun and has to find and shoot every hider before the timer runs out.
 ```bash
 # 1. Install Git LFS once, then clone
 git lfs install
-git clone https://github.com/Occupying-Mars/mecca-girgit.git
-cd mecca-girgit
+git clone https://github.com/Occupying-Mars/meccha-girgit.git
+cd meccha-girgit
 
 # 2. Open the project in Godot 4.6
 #    - Godot editor → Import → pick this folder's project.godot → Edit
@@ -161,7 +161,7 @@ Godot-CLI reference.
 ## Reporting bugs
 
 Found a bug or something that feels off? **Please
-[open an issue](https://github.com/Occupying-Mars/mecca-girgit/issues)** with:
+[open an issue](https://github.com/Occupying-Mars/meccha-girgit/issues)** with:
 
 - what you did, what you expected, what happened,
 - your OS + how you were connected (LAN / direct / dedicated / EOS),

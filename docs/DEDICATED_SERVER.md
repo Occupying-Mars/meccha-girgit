@@ -34,8 +34,8 @@ sudo mv Godot_v4.6.2-stable_linux.x86_64 /usr/local/bin/godot
 sudo apt install -y git python3   # python3 only needed if you want the Sponza map
 
 # get the game
-git clone git@github.com:Occupying-Mars/mecca-girgit.git
-cd mecca-girgit
+git clone git@github.com:Occupying-Mars/meccha-girgit.git
+cd meccha-girgit
 ```
 
 **Open the port** (this is the step people forget) — UDP **24565** in the VM's

@@ -71,5 +71,5 @@ license permits redistribution.
 ---
 
 _If any attribution here is incomplete or incorrect, please
-[open an issue](https://github.com/Occupying-Mars/mecca-girgit/issues) so we can
+[open an issue](https://github.com/Occupying-Mars/meccha-girgit/issues) so we can
 fix it._

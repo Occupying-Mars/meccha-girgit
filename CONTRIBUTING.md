@@ -10,7 +10,7 @@ modes, polish, docs. This guide gets you set up and explains how we work.
 - **One thing per PR.** A PR should do a single coherent thing (one fix, one
   feature). Small PRs get reviewed and merged faster.
 - **Open an issue first for anything big.** For a new system or a large change,
-  [file an issue](https://github.com/Occupying-Mars/mecca-girgit/issues) to
+  [file an issue](https://github.com/Occupying-Mars/meccha-girgit/issues) to
   discuss it before you build — it saves everyone rework. Small fixes can go
   straight to a PR.
 
@@ -21,8 +21,8 @@ modes, polish, docs. This guide gets you set up and explains how we work.
 2. Fork the repo, then:
    ```bash
    git lfs install
-   git clone https://github.com/<your-username>/mecca-girgit.git
-   cd mecca-girgit
+   git clone https://github.com/<your-username>/meccha-girgit.git
+   cd meccha-girgit
    godot --path .        # or open project.godot in the editor
    ```
 3. Make a branch: `git checkout -b fix/short-description`.
