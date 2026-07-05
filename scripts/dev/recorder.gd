@@ -19,7 +19,15 @@ extends Node
 ##   --no-quit           don't quit after captures (lets the user keep playing)
 ##   --test=NAME         drive a scripted input sequence in parallel with capture
 
-const OUT_ROOT := "D:/meccha_runs"
+## Output root for captures. Absolute + cross-platform: Windows has no /tmp, so
+## fall back to the app user-data dir there. Override with the MECCHA_RUNS env var.
+static func out_root() -> String:
+	var env := OS.get_environment("MECCHA_RUNS")
+	if env != "":
+		return env
+	if OS.has_feature("windows"):
+		return OS.get_user_data_dir().path_join("meccha_runs")
+	return "/tmp/meccha_runs"
 
 var run_name: String = ""
 var frames: int = 4
@@ -42,7 +50,7 @@ func _ready() -> void:
 	if run_name.is_empty():
 		return  # recorder is dormant unless invoked
 
-	_out_dir = "%s/%s" % [OUT_ROOT, run_name]
+	_out_dir = "%s/%s" % [out_root(), run_name]
 	DirAccess.make_dir_recursive_absolute(_out_dir)
 	print("[recorder] run=", run_name, " out=", _out_dir, " frames=", frames, " interval=", interval)
 
@@ -392,7 +400,10 @@ func _menu_join() -> void:
 				% [p.name, p.role, str(p.is_multiplayer_authority())])
 
 
-const EOS_CODE_FILE := "D:/meccha_runs/eos_lobby_code.txt"
+## Cross-process handoff file for the two-instance EOS test (host writes the
+## lobby code, joiner reads it). Lives under the same portable out_root().
+static func eos_code_file() -> String:
+	return out_root().path_join("eos_lobby_code.txt")
 
 
 func _lobby_show() -> void:
@@ -408,7 +419,8 @@ func _eos_host() -> void:
 	print("[recorder] eos_host err=%s code=%s" % [error_string(err), NetSession.eos_code])
 	if err != OK:
 		return
-	var f := FileAccess.open(EOS_CODE_FILE, FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute(out_root())
+	var f := FileAccess.open(eos_code_file(), FileAccess.WRITE)
 	f.store_string(NetSession.eos_code)
 	f.close()
 	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
@@ -419,8 +431,8 @@ func _eos_host() -> void:
 func _eos_join() -> void:
 	var code := ""
 	for i in 20:
-		if FileAccess.file_exists(EOS_CODE_FILE):
-			code = FileAccess.get_file_as_string(EOS_CODE_FILE).strip_edges()
+		if FileAccess.file_exists(eos_code_file()):
+			code = FileAccess.get_file_as_string(eos_code_file()).strip_edges()
 			if not code.is_empty():
 				break
 		await get_tree().create_timer(0.5).timeout

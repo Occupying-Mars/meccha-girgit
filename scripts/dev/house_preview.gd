@@ -58,9 +58,13 @@ func _ready() -> void:
 	cam.look_at(Vector3(0, 0, 0), Vector3.UP)
 	cam.current = true
 
+	# Cross-platform output dir (Windows has no /tmp).
+	var out_dir := OS.get_user_data_dir().path_join("meccha_verify") if OS.has_feature("windows") else "/tmp/meccha_verify"
+	DirAccess.make_dir_recursive_absolute(out_dir)
+
 	for _i in 40:
 		await get_tree().process_frame
-	get_viewport().get_texture().get_image().save_png("D:/meccha_verify/house_preview.png")
+	get_viewport().get_texture().get_image().save_png(out_dir.path_join("house_preview.png"))
 	print("[house_preview] saved overhead")
 
 	# Eye-level interior shot in the living room (room 0,0), roof visible.
@@ -70,6 +74,6 @@ func _ready() -> void:
 	cam.look_at(Vector3(-8, 0.9, -6.0), Vector3.UP)
 	for _i in 16:
 		await get_tree().process_frame
-	get_viewport().get_texture().get_image().save_png("D:/meccha_verify/house_interior.png")
+	get_viewport().get_texture().get_image().save_png(out_dir.path_join("house_interior.png"))
 	print("[house_preview] saved interior")
 	get_tree().quit()
