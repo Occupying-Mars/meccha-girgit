@@ -62,6 +62,12 @@ license permits redistribution.
 - **License:** CC BY 4.0 — attribution required.
   https://github.com/KhronosGroup/glTF-Sample-Assets
 
+### Blue Hour map props (houses, rocks, boat)
+- **Path:** `assets/maps/bluehour/` (re-fetchable via `tools/download_bluehour_assets.py`)
+- **Authors:** Kenney (kenney.nl) and Quaternius (quaternius.com), via Poly Pizza
+- **License:** CC0 1.0 (public domain) — no attribution required; credited here as
+  good practice. https://poly.pizza
+
 ---
 
 _If any attribution here is incomplete or incorrect, please
