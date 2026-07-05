@@ -828,6 +828,16 @@ func _fire() -> void:
 			target_id = np.name.to_int()
 	if _seeker_hud != null and _seeker_hud.has_method("register_shot"):
 		_seeker_hud.register_shot(target_id != -1)
+	# The shotgun shoots PAINT: burst from the barrel + a colourful splat where
+	# the shot lands. Replicated (tiny payload — two points, a normal, a colour)
+	# so hiders also see where the seeker has been spraying.
+	var fwd: Vector3 = -_muzzle.global_transform.basis.z
+	var from: Vector3 = _muzzle.global_transform.origin + fwd * 0.45
+	var color: Color = SPLAT_COLORS[randi() % SPLAT_COLORS.size()]
+	if _muzzle.is_colliding():
+		_paint_splash.rpc(from, _muzzle.get_collision_point(), _muzzle.get_collision_normal(), color, true)
+	else:
+		_paint_splash.rpc(from, from + fwd * 3.0, Vector3.UP, color, false)
 	if target_id == -1:
 		return
 	var game := get_tree().current_scene
@@ -835,6 +845,133 @@ func _fire() -> void:
 		game._request_eliminate(target_id)  # direct — we are the host
 	else:
 		game._request_eliminate.rpc_id(1, target_id)
+
+
+## --- Paint splash FX (every shot splats paint) --------------------------------
+
+const SPLAT_COLORS: Array[Color] = [
+	Color(1.0, 0.32, 0.65),  # pink
+	Color(0.35, 0.9, 0.4),   # green
+	Color(1.0, 0.62, 0.15),  # orange
+	Color(0.3, 0.75, 1.0),   # cyan
+	Color(0.95, 0.9, 0.25),  # yellow
+	Color(0.7, 0.45, 1.0),   # purple
+]
+const MAX_SPLATS := 48       # oldest decals recycle past this
+const SPLAT_LIFE := 16.0     # seconds a splat stays before fading
+const SPLAT_FADE := 4.0
+
+static var _splat_texs: Array[ImageTexture] = []
+
+
+@rpc("authority", "call_local", "reliable")
+func _paint_splash(from: Vector3, hit: Vector3, normal: Vector3, color: Color, has_hit: bool) -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var dir := (hit - from).normalized()
+	# A mix of colours per shot — `color` from the RPC plus a second from the
+	# palette — so the spray reads as multicoloured paint, not one flat tint.
+	var c2: Color = SPLAT_COLORS[randi() % SPLAT_COLORS.size()]
+	_spawn_paint_burst(scene, from, dir, color, 6, 2.5)  # muzzle puff
+	_spawn_paint_burst(scene, from, dir, c2, 4, 2.3)
+	if has_hit:
+		_spawn_paint_burst(scene, hit + normal * 0.05, normal, color, 13, 3.5)
+		_spawn_paint_burst(scene, hit + normal * 0.05, normal, c2, 10, 3.2)
+		_spawn_splat_decal(scene, hit, normal)
+
+
+## One-shot droplet burst (paint spray). Frees itself when finished.
+func _spawn_paint_burst(scene: Node, pos: Vector3, dir: Vector3, color: Color, amount: int, speed: float) -> void:
+	var p := GPUParticles3D.new()
+	p.one_shot = true
+	p.amount = amount
+	p.lifetime = 0.5
+	p.explosiveness = 1.0
+	var mat := ParticleProcessMaterial.new()
+	mat.direction = dir
+	mat.spread = 32.0
+	mat.initial_velocity_min = speed * 0.6
+	mat.initial_velocity_max = speed
+	mat.gravity = Vector3(0, -9.8, 0)
+	mat.scale_min = 0.6
+	mat.scale_max = 1.5
+	p.process_material = mat
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.02
+	mesh.height = 0.04
+	mesh.radial_segments = 6
+	mesh.rings = 3
+	var mm := StandardMaterial3D.new()
+	mm.albedo_color = color
+	mm.roughness = 0.4
+	mesh.material = mm
+	p.draw_pass_1 = mesh
+	scene.add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+
+
+## Multi-colour paint splat projected onto the hit surface; fades out, capped.
+func _spawn_splat_decal(scene: Node, pos: Vector3, normal: Vector3) -> void:
+	var old := get_tree().get_nodes_in_group("paint_splats")
+	if old.size() >= MAX_SPLATS:
+		old[0].queue_free()
+	var texs := _get_splat_textures()
+	var d := Decal.new()
+	d.texture_albedo = texs[randi() % texs.size()]  # colours are baked in
+	d.modulate = Color.WHITE  # show the texture's own mixed colours
+	var s := randf_range(0.6, 1.0)  # a bit bigger than before (was 0.45..0.8)
+	d.size = Vector3(s, 0.3, s)
+	d.add_to_group("paint_splats")
+	scene.add_child(d)
+	# A Decal projects along its local -Y: aim Y at the surface normal, then
+	# spin it randomly around the normal so no two splats look identical.
+	var y := normal.normalized()
+	var x := y.cross(Vector3.UP)
+	if x.length() < 0.01:
+		x = y.cross(Vector3.RIGHT)
+	x = x.normalized()
+	var b := Basis(x, y, x.cross(y)).rotated(y, randf() * TAU)
+	d.global_transform = Transform3D(b, pos + y * 0.02)
+	var tw := d.create_tween()
+	tw.tween_interval(SPLAT_LIFE)
+	tw.tween_property(d, "modulate:a", 0.0, SPLAT_FADE)
+	tw.tween_callback(d.queue_free)
+
+
+## A small SET of splat textures, each an irregular central blob + satellite
+## droplets with the colours BAKED IN as a mixture from the palette. Generated
+## once (deterministic per index) — no art asset needed; a shot picks one at
+## random so no two splats look alike.
+static func _get_splat_textures() -> Array[ImageTexture]:
+	if not _splat_texs.is_empty():
+		return _splat_texs
+	var size := 128
+	for variant in 6:
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 20260705 + variant  # fixed per variant → same on every peer
+		# Central blob, then droplets — each a random palette colour (the mix).
+		_splat_blob(img, size * 0.5, size * 0.5, size * 0.28, SPLAT_COLORS[rng.randi() % SPLAT_COLORS.size()])
+		for i in 24:
+			var ang := rng.randf() * TAU
+			var dist := rng.randf_range(size * 0.15, size * 0.47)
+			var r := rng.randf_range(size * 0.025, size * 0.09)
+			var col: Color = SPLAT_COLORS[rng.randi() % SPLAT_COLORS.size()]
+			_splat_blob(img, size * 0.5 + cos(ang) * dist, size * 0.5 + sin(ang) * dist, r, col)
+		_splat_texs.append(ImageTexture.create_from_image(img))
+	return _splat_texs
+
+
+static func _splat_blob(img: Image, cx: float, cy: float, r: float, col: Color) -> void:
+	for y in range(maxi(0, int(cy - r)), mini(img.get_height(), int(cy + r) + 1)):
+		for x in range(maxi(0, int(cx - r)), mini(img.get_width(), int(cx + r) + 1)):
+			var dx := float(x) - cx
+			var dy := float(y) - cy
+			if dx * dx + dy * dy <= r * r:
+				img.set_pixel(x, y, col)
 
 
 func _find_net_player(node: Node) -> NetPlayer:

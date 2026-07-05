@@ -91,6 +91,7 @@ func _run_test_async() -> void:
 				{"action": "fire", "press": 0.8, "release": 0.85},
 				{"action": "fire", "press": 1.3, "release": 1.35},
 			])
+			_report_splats()
 		"look_right":
 			_play_mouse(Vector2(8.0, 0.0), 60)
 		"look_left":
@@ -168,6 +169,14 @@ func _run_test_async() -> void:
 			_eos_join()
 		_:
 			push_warning("[recorder] unknown test name: " + test_name)
+
+
+## After the fire sequence: report how many paint-splat decals landed, so the
+## splash system is asserted by log (a splat spawns per shot that hits world).
+func _report_splats() -> void:
+	await get_tree().create_timer(2.2).timeout
+	var n := get_tree().get_nodes_in_group("paint_splats").size()
+	print("[recorder] fire: paint splat decals in scene = ", n)
 
 
 func _paint_demo() -> void:
