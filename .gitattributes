@@ -30,3 +30,6 @@
 *.gd     text
 *.gdshader text
 *.import text
+
+# Main-menu logo: regular file (not LFS) so it always materialises on clone
+assets/logo.png -filter -diff -merge -text
