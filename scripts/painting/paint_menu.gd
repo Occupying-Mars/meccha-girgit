@@ -140,6 +140,15 @@ func _color_at(collider, ray_from: Vector3, ray_dir: Vector3) -> Variant:
 		return null
 	var meshes := _find_meshes(collider)
 	if meshes.is_empty():
+		# create_trimesh_collision() maps (Sponza) put the StaticBody UNDER the
+		# mesh, so the collider's mesh is an ancestor, not in its subtree.
+		var n: Node = collider.get_parent()
+		while n != null:
+			if n is MeshInstance3D:
+				meshes = [n]
+				break
+			n = n.get_parent()
+	if meshes.is_empty():
 		return null
 
 	var best_t: float = INF

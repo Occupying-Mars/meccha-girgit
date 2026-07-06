@@ -264,6 +264,11 @@ func _color_at(collider, ray_from: Vector3, ray_dir: Vector3) -> Variant:
 		return null
 	var meshes := _find_meshes(collider)
 	if meshes.is_empty():
+		# Collision made with MeshInstance3D.create_trimesh_collision() (Sponza,
+		# Blue Hour) puts the StaticBody UNDER the mesh, so the hit collider has no
+		# mesh in its subtree — the mesh is an ANCESTOR. Walk up to find it.
+		meshes = _meshes_from_ancestor(collider)
+	if meshes.is_empty():
 		return null
 	var best_t: float = INF
 	var best_mi: MeshInstance3D = null
@@ -385,6 +390,17 @@ func _bary_uv(p: Vector3, a: Vector3, b: Vector3, c: Vector3, ua: Vector2, ub: V
 	var ww: float = (d00 * d21 - d01 * d20) / denom
 	var uu: float = 1.0 - vv - ww
 	return ua * uu + ub * vv + uc * ww
+
+
+## Nearest MeshInstance3D ancestor of a collider — used when collision was built
+## with create_trimesh_collision() (the StaticBody sits under the mesh).
+func _meshes_from_ancestor(collider: Node) -> Array:
+	var n: Node = collider.get_parent()
+	while n != null:
+		if n is MeshInstance3D:
+			return [n]
+		n = n.get_parent()
+	return []
 
 
 func _find_meshes(node: Node, out: Array = []) -> Array:
