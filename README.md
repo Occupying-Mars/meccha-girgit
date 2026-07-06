@@ -43,6 +43,24 @@ before the timer runs out. See [Features](#features) for the details.
 
 ---
 
+## Download & play (no setup)
+
+Just want to play? Grab a ready-to-run build from the
+**[Releases page](https://github.com/Occupying-Mars/meccha-girgit/releases/latest)** —
+no Godot, no source, no accounts.
+
+- **Windows** — download `meccha-girgit-windows.zip`, extract the **whole** folder
+  (keep the `.dll`s next to the `.exe`), run `meccha-girgit.exe`. If SmartScreen
+  warns, click **More info → Run anyway**.
+- **macOS** — download `meccha-girgit-mac.zip`, unzip, then run
+  `xattr -cr meccha-girgit.app` in Terminal once (clears the unsigned-app block),
+  and open it. Details in [Running a downloaded build](#running-a-downloaded-build-unsigned-app-warnings).
+
+One person **Hosts** (leave *Online (EOS)* selected) and shares the invite code;
+everyone else pastes it and **Joins**. Windows and Mac players can play together.
+
+---
+
 ## Download & run (from source)
 
 ```bash
