@@ -1,10 +1,10 @@
-# Girgit — a hide-and-seek body-painting game
+# Meccha-Girgit — a hide-and-seek body-painting game
 
 <p align="center">
-  <img src="assets/logo.png" alt="Girgit logo" width="220">
+  <img src="assets/logo.png" alt="Meccha-Girgit logo" width="220">
 </p>
 
-**Girgit** is a multiplayer hide-and-seek game built in **Godot 4.6**. Hiders
+**Meccha-Girgit** is a multiplayer hide-and-seek game built in **Godot 4.6**. Hiders
 paint and pose their bodies to camouflage into the environment, while the
 **seeker** stalks the map with a gun and has to find and shoot every hider
 before the timer runs out. See [Features](#features) for the details.
