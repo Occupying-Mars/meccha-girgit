@@ -92,6 +92,10 @@ const VIEW_HALF_COS := 0.5  # ~60° half-cone
 
 var _started: bool = false
 var _built_map: String = ""
+## Spawn positions already handed out this batch — so same-frame spawns don't
+## overlap (see _on_session_started). Min separation between any two spawns.
+var _used_spawns: Array = []
+const MIN_SPAWN_DIST := 1.0
 ## True on maps with a low flat ceiling at wall height (backrooms/house) — read
 ## by net_player to cap wall-climbs so the orbit camera can't poke the ceiling.
 var low_ceiling: bool = false
@@ -387,6 +391,12 @@ func _on_session_started() -> void:
 		_started = true
 		GameState.prep_seconds = NetSession.prep_seconds
 		GameState.seek_seconds = NetSession.seek_seconds
+		# All avatars spawn in this one loop, before the physics space registers
+		# the just-spawned bodies — so spot-clearing can't "see" siblings and two
+		# players could land on the same spot (a full-size seeker stacking on a
+		# hider, then riding it). _used_spawns tracks assigned spots so each new
+		# spawn keeps its distance. Reset per batch.
+		_used_spawns.clear()
 		for id in NetSession.players.keys():
 			_add_player(int(id))
 		GameState.start_match()
@@ -565,9 +575,11 @@ func _add_player(id: int) -> void:
 		role = NetPlayer.Role.HIDER  # CLI preview: be a hider to test paint/pose
 	else:
 		role = NetPlayer.Role.SEEKER if id == 1 else NetPlayer.Role.HIDER
+	var pos := _spawn_pos(_players.get_child_count())
+	_used_spawns.append(pos)  # so the next same-frame spawn keeps its distance
 	var data := {
 		"id": id,
-		"pos": _spawn_pos(_players.get_child_count()),
+		"pos": pos,
 		"role": role,
 	}
 	_spawner.spawn(data)
@@ -658,10 +670,18 @@ func _clear_spawn(pos: Vector3) -> Vector3:
 			var p: Vector3 = pos + Vector3(cos(a) * ring, 0.0, sin(a) * ring)
 			if _spawn_spot_clear(space, q, p):
 				return p
-	return spawn_base  # last resort: the room centre
+	# Last resort: offset by how many spawns are already placed so failing
+	# spawns still don't all stack on the exact same point.
+	return spawn_base + Vector3(float(_used_spawns.size()) * MIN_SPAWN_DIST, 0.0, 0.0)
 
 
 func _spawn_spot_clear(space: PhysicsDirectSpaceState3D, q: PhysicsShapeQueryParameters3D, p: Vector3) -> bool:
+	# (0) keep clear of any spawn already handed out this batch — the just-spawned
+	# bodies aren't in the physics space yet, so the shape query below can't see
+	# them; this is what stops a seeker spawning on top of a hider.
+	for u in _used_spawns:
+		if Vector2(p.x - u.x, p.z - u.z).length() < MIN_SPAWN_DIST:
+			return false
 	# (a) a standing-body capsule (~y 0.1..1.6) fits clear of furniture, AND
 	# (b) the spot is in the same room as spawn_base — a ray to the room centre,
 	#     run high (y 2.8, above the furniture but below the ceiling) so it only

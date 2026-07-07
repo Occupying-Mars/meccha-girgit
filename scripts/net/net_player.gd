@@ -24,6 +24,10 @@ const STICK_RANGE := 2.2    # forgiving reach; sticking snaps you flush anyway
 ## raw constant on a 0.34-scale hider left a ~6 cm air gap against the wall.
 const WALL_OFFSET := 0.09
 const WALL_VSPEED := 1.1    # climb/strafe speed while stuck
+## Hiders may mantle onto surfaces at most this far above where they started
+## climbing (crates / furniture / low ledges) — never onto high walkable floors
+## the ground-bound seeker can't reach (e.g. Sponza's upper gallery).
+const MAX_MANTLE_RISE := 1.8
 
 @export var move_speed: float = 4.0
 @export var mouse_sensitivity: float = 0.0025
@@ -183,9 +187,10 @@ func _configure_role() -> void:
 		body.position.y = -0.04 * body.scale.y  # leg tips touch the floor exactly
 		# Size the capsule DIRECTLY — node scale on a CollisionShape3D is often
 		# ignored by the physics server, which left the tiny hider floating a
-		# full-size radius off every wall.
+		# full-size radius off every wall. Radius covers the ARM span (0.34 wide),
+		# not just the torso — a narrower capsule let the arms poke into walls.
 		var cap := CapsuleShape3D.new()
-		cap.radius = 0.25 * HIDER_SCALE
+		cap.radius = 0.32 * HIDER_SCALE
 		cap.height = 1.7 * HIDER_SCALE
 		_collision.shape = cap
 		_collision.scale = Vector3.ONE
@@ -499,6 +504,13 @@ func _try_mantle() -> bool:
 	var ledge := hit["position"] as Vector3
 	if not _fits_standing(ledge):
 		return false  # a body wouldn't fit up there (shelf under a low ceiling…)
+	# FAIRNESS: only mantle onto surfaces within reach of where we started
+	# climbing — crates, furniture, low ledges. A high walkable surface (a
+	# Sponza upper gallery / 2nd floor) is unreachable by the ground-bound
+	# seeker, so mantling there is unfair: refuse it and stay clinging to the
+	# wall (where the seeker can still see and shoot us).
+	if ledge.y - _stick_y > MAX_MANTLE_RISE:
+		return false
 	_stuck = false
 	_collision.disabled = false
 	_wall_normal = Vector3.ZERO
@@ -714,9 +726,47 @@ func _receive_paint_chunk(xid: int, seq: int, total: int, chunk: PackedByteArray
 		body.apply_paint_state(state)
 
 
+## How far the posed body reaches horizontally past the movement capsule (world
+## units, for a HIDER-scale body). Poses that spread the body — lie flat tips it
+## fully horizontal — otherwise push half the body through a nearby wall.
+const POSE_REACH := {"lie_flat": 0.55, "ball": 0.24, "crouch": 0.24}
+
+
 func _broadcast_pose(pose_name: String) -> void:
 	if _is_mine:
+		_settle_after_pose(pose_name)  # keep the spread pose out of walls
 		_receive_pose.rpc(pose_name)
+
+
+## Owner-side: after a spreading pose, if the posed body would be embedded in a
+## wall/object, nudge the avatar to the nearest spot where it fits. Keeps a posed
+## hider from hiding half-inside geometry (un-findable / un-taggable).
+func _settle_after_pose(pose_name: String) -> void:
+	if _stuck:
+		return  # wall-stick is a deliberate flush pose against the wall
+	var reach: float = POSE_REACH.get(pose_name, 0.0)
+	if reach <= 0.05:
+		return
+	var space := get_world_3d().direct_space_state
+	var shape := CapsuleShape3D.new()
+	shape.radius = reach
+	shape.height = maxf(1.7 * body.scale.y, reach * 2.0)
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape
+	q.collision_mask = 1
+	q.exclude = [get_rid()]
+	var feet_to_mid := Vector3(0, 0.5 * body.scale.y, 0)
+	q.transform = Transform3D(Basis(), global_position + feet_to_mid)
+	if space.intersect_shape(q, 1).is_empty():
+		return  # posed body is clear of geometry
+	for dist in [0.2, 0.4, 0.6, 0.9]:
+		for deg in range(0, 360, 30):
+			var a := deg_to_rad(float(deg))
+			var off := Vector3(cos(a) * dist, 0.0, sin(a) * dist)
+			q.transform = Transform3D(Basis(), global_position + off + feet_to_mid)
+			if space.intersect_shape(q, 1).is_empty():
+				global_position += off
+				return
 
 
 @rpc("authority", "call_remote", "reliable")

@@ -172,6 +172,10 @@ func _run_test_async() -> void:
 			# (CLI --server --ashider) stick to the nearest wall and climb, then
 			# report how high the hider rose — used to verify tall-wall climbing.
 			_wall_climb_test()
+		"pose_clip":
+			# (CLI --server --ashider) jam the hider against a wall, lie-flat pose,
+			# and verify the pose-settle pushes the embedded body back out.
+			_pose_clip_test()
 		"aim_set":
 			# (host/seeker) aim toward world +X and hold, reporting the body yaw.
 			_aim_set()
@@ -394,8 +398,17 @@ func _menu_host() -> void:
 	await get_tree().create_timer(2.5).timeout
 	var players := get_tree().current_scene.get_node_or_null("Players")
 	if players != null:
+		var positions: Array = []
 		for p in players.get_children():
-			print("[recorder] host: spawned %s role=%d" % [p.name, p.role])
+			print("[recorder] host: spawned %s role=%d pos=(%.1f,%.1f,%.1f)"
+				% [p.name, p.role, p.global_position.x, p.global_position.y, p.global_position.z])
+			positions.append(p.global_position)
+		var min_d := 1e9
+		for i in positions.size():
+			for j in range(i + 1, positions.size()):
+				min_d = minf(min_d, positions[i].distance_to(positions[j]))
+		if positions.size() >= 2:
+			print("[recorder] host: MIN pairwise spawn distance = %.2f m (overlap if <0.6)" % min_d)
 
 
 func _menu_join() -> void:
@@ -422,6 +435,57 @@ func _lobby_show() -> void:
 	NetSession.selected_map = "arena"  # light map so the lobby is up fast
 	NetSession.host_game("HostUser", NetSession.Mode.DECIDED)
 	get_tree().change_scene_to_file(NetSession.GAME_SCENE)
+
+
+func _pose_clip_test() -> void:
+	await get_tree().create_timer(2.0).timeout
+	var players := get_tree().current_scene.get_node_or_null("Players")
+	if players == null:
+		return
+	var p = null
+	for c in players.get_children():
+		if c.is_multiplayer_authority() and not c.is_seeker():
+			p = c
+	if p == null:
+		print("[recorder] pose_clip: no local hider"); return
+	# Jam the hider hard against the nearest wall (0.06 m off it) so a lie-flat
+	# body would poke deep into it.
+	var space: PhysicsDirectSpaceState3D = p.get_world_3d().direct_space_state
+	var from: Vector3 = p.global_position + Vector3(0, 0.4, 0)
+	var best := {}
+	var best_d := INF
+	for i in 24:
+		var ang := TAU * float(i) / 24.0
+		var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(sin(ang), 0, cos(ang)) * 8.0)
+		q.exclude = [p.get_rid()]; q.collision_mask = 1
+		var hit := space.intersect_ray(q)
+		if hit.is_empty() or absf((hit["normal"] as Vector3).y) > 0.5:
+			continue
+		var d: float = from.distance_to(hit["position"])
+		if d < best_d: best_d = d; best = hit
+	if best.is_empty():
+		print("[recorder] pose_clip: no wall found"); return
+	p.global_position = (best["position"] as Vector3) + (best["normal"] as Vector3) * 0.06
+	await get_tree().physics_frame
+	var before_embedded := _pose_body_overlaps(p)
+	var pos0: Vector3 = p.global_position
+	p.body.apply_pose("lie_flat", false)
+	p._settle_after_pose("lie_flat")   # the fix
+	await get_tree().physics_frame
+	var after_embedded := _pose_body_overlaps(p)
+	print("[recorder] pose_clip: embedded_before=%s  moved=%.2f m  embedded_after=%s"
+		% [str(before_embedded), (p.global_position - pos0).length(), str(after_embedded)])
+
+
+## Does a lie-flat-reach body overlap geometry at this hider's position?
+func _pose_body_overlaps(p) -> bool:
+	var shape := CapsuleShape3D.new()
+	shape.radius = 0.55
+	shape.height = maxf(1.7 * p.body.scale.y, 1.1)
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = shape; q.collision_mask = 1; q.exclude = [p.get_rid()]
+	q.transform = Transform3D(Basis(), p.global_position + Vector3(0, 0.5 * p.body.scale.y, 0))
+	return not p.get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
 
 
 func _wall_climb_test() -> void:
